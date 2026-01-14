@@ -9,8 +9,9 @@ from pathlib import Path
 from typing import Optional
 
 import uvicorn
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from werender.core.blender import BlenderRenderer
@@ -60,6 +61,9 @@ class CoordinatorServer:
         self.workers: dict[str, WorkerInfo] = {}
         self.blender_path: Optional[Path] = None
 
+        # WebSocket connections
+        self.websocket_connections: list[WebSocket] = []
+
         # Discovery service
         self.discovery = DiscoveryService(
             node_type="coordinator",
@@ -99,6 +103,14 @@ class CoordinatorServer:
         # Worker management endpoints
         self.app.get("/api/workers")(self._api_list_workers)
 
+        # WebSocket endpoint
+        self.app.websocket("/ws")(self._websocket_endpoint)
+
+        # Serve static files (dashboard)
+        dashboard_dir = Path(__file__).parent.parent / "dashboard"
+        if dashboard_dir.exists():
+            self.app.mount("/", StaticFiles(directory=str(dashboard_dir), html=True), name="dashboard")
+
     async def _on_startup(self) -> None:
         """Handle startup event."""
         self.discovery.start()
@@ -107,6 +119,7 @@ class CoordinatorServer:
 
         # Start worker health check task
         asyncio.create_task(self._health_check_loop())
+        asyncio.create_task(self._broadcast_updates_loop())
 
     async def _on_shutdown(self) -> None:
         """Handle shutdown event."""
@@ -137,11 +150,20 @@ class CoordinatorServer:
                 del self.workers[worker_id]
                 print(f"⚠️  Worker {worker.worker_name} removed (timeout)")
 
-    def _on_worker_discovered(self, node: NodeInfo) -> None:
+            await self._broadcast_update("workers")
+
+    async def _broadcast_updates_loop(self) -> None:
+        """Periodically broadcast updates to WebSocket clients."""
+        while True:
+            await asyncio.sleep(2)
+            await self._broadcast_update("all")
+
+    async def _on_worker_discovered(self, node: NodeInfo) -> None:
         """Handle worker discovery."""
         print(f"✅ Worker discovered: {node.hostname} ({node.address}:{node.port})")
+        await self._broadcast_update("workers")
 
-    def _on_worker_removed(self, node: NodeInfo) -> None:
+    async def _on_worker_removed(self, node: NodeInfo) -> None:
         """Handle worker removal."""
         # Find and remove worker
         to_remove = []
@@ -161,6 +183,8 @@ class CoordinatorServer:
 
             del self.workers[worker_id]
             print(f"⚠️  Worker {worker.worker_name} removed (disconnected)")
+
+        await self._broadcast_update("workers")
 
     # ========== API Endpoints ==========
 
@@ -250,6 +274,7 @@ class CoordinatorServer:
         if job.status == "completed":
             print(f"🎉 Job {job.name} completed!")
 
+        await self._broadcast_update("jobs")
         return {"status": "success"}
 
     async def _api_fail_task(self, task_id: str, error: dict) -> dict:
@@ -276,6 +301,7 @@ class CoordinatorServer:
         if task.assigned_worker in self.workers:
             self.workers[task.assigned_worker].current_task_id = None
 
+        await self._broadcast_update("jobs")
         return {"status": "success"}
 
     async def _api_get_blend_file(self, job_id: str) -> FileResponse:
@@ -333,6 +359,7 @@ class CoordinatorServer:
         self.jobs[job.id] = job
         print(f"✅ Job created: {job.name} (frames {frame_start}-{frame_end})")
 
+        await self._broadcast_update("jobs")
         return {"job_id": job.id, "status": "pending"}
 
     async def _api_list_jobs(self) -> list[dict]:
@@ -380,6 +407,7 @@ class CoordinatorServer:
 
         job.start()
         print(f"▶️  Job {job.name} started")
+        await self._broadcast_update("jobs")
         return {"status": "running"}
 
     async def _api_pause_job(self, job_id: str) -> dict:
@@ -390,6 +418,7 @@ class CoordinatorServer:
 
         job.pause()
         print(f"⏸️  Job {job.name} paused")
+        await self._broadcast_update("jobs")
         return {"status": "paused"}
 
     async def _api_resume_job(self, job_id: str) -> dict:
@@ -400,6 +429,7 @@ class CoordinatorServer:
 
         job.resume()
         print(f"▶️  Job {job.name} resumed")
+        await self._broadcast_update("jobs")
         return {"status": "running"}
 
     async def _api_cancel_job(self, job_id: str) -> dict:
@@ -415,6 +445,7 @@ class CoordinatorServer:
 
         job.status = "cancelled"
         print(f"❌ Job {job.name} cancelled")
+        await self._broadcast_update("jobs")
         return {"status": "cancelled"}
 
     async def _api_list_workers(self) -> list[dict]:
@@ -430,6 +461,44 @@ class CoordinatorServer:
             }
             for w in self.workers.values()
         ]
+
+    async def _websocket_endpoint(self, websocket: WebSocket) -> None:
+        """WebSocket endpoint for real-time updates."""
+        await websocket.accept()
+        self.websocket_connections.append(websocket)
+
+        try:
+            while True:
+                # Keep connection alive
+                await websocket.receive_text()
+        except WebSocketDisconnect:
+            self.websocket_connections.remove(websocket)
+
+    async def _broadcast_update(self, update_type: str) -> None:
+        """Broadcast update to all connected WebSocket clients."""
+        if not self.websocket_connections:
+            return
+
+        data = {"type": update_type}
+
+        if update_type in ["jobs", "all"]:
+            data["jobs"] = await self._api_list_jobs()
+
+        if update_type in ["workers", "all"]:
+            data["workers"] = await self._api_list_workers()
+
+        # Send to all connected clients
+        disconnected = []
+        for websocket in self.websocket_connections:
+            try:
+                await websocket.send_json(data)
+            except Exception:
+                disconnected.append(websocket)
+
+        # Remove disconnected clients
+        for ws in disconnected:
+            if ws in self.websocket_connections:
+                self.websocket_connections.remove(ws)
 
     def _get_blend_file_hash(self, job: RenderJob) -> str:
         """Get hash of blend file."""

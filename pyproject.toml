@@ -43,9 +43,10 @@ werender = "werender.main:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/werender"]
+artifacts = ["src/werender/dashboard/**"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/werender"]
+include = ["src/werender/**"]
 
 [tool.ruff]
 line-length = 100

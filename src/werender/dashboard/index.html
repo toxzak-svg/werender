@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WeRender Dashboard</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <style>
+        body {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #e0e0e0;
+        }
+        .navbar {
+            background: rgba(26, 26, 46, 0.95) !important;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .navbar-brand {
+            font-weight: bold;
+            font-size: 1.5rem;
+        }
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+        }
+        .status-badge {
+            font-weight: 500;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.875rem;
+        }
+        .status-pending { background: rgba(255, 193, 7, 0.2); color: #ffc107; }
+        .status-running { background: rgba(13, 202, 240, 0.2); color: #0dcaf0; }
+        .status-paused { background: rgba(255, 165, 0, 0.2); color: #ffa500; }
+        .status-completed { background: rgba(25, 135, 84, 0.2); color: #198754; }
+        .status-cancelled { background: rgba(220, 53, 69, 0.2); color: #dc3545; }
+        .worker-idle { border-left: 4px solid #6c757d; }
+        .worker-rendering { border-left: 4px solid #0dcaf0; }
+        .worker-offline { border-left: 4px solid #dc3545; }
+        .progress {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        .progress-bar {
+            transition: width 0.3s ease;
+        }
+        .btn {
+            font-weight: 500;
+        }
+        .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; }
+        .btn-primary:hover { background: linear-gradient(135deg, #764ba2 0%, #667eea 100%); }
+        .btn-success { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); border: none; }
+        .btn-success:hover { background: linear-gradient(135deg, #38ef7d 0%, #11998e 100%); }
+        .btn-warning { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); border: none; }
+        .btn-danger { background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%); border: none; }
+        .table {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .table thead th {
+            background: rgba(255, 255, 255, 0.1);
+            border-bottom: 2px solid rgba(255,255,255,0.1);
+            color: #e0e0e0;
+        }
+        .table tbody td {
+            border-top: 1px solid rgba(255,255,255,0.05);
+            color: #b0b0b0;
+        }
+        .modal-content {
+            background: rgba(26, 26, 46, 0.98);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .modal-header, .modal-footer {
+            border-color: rgba(255,255,255,0.1);
+        }
+        .form-label {
+            color: #e0e0e0;
+        }
+        .form-control, .form-select {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: #e0e0e0;
+        }
+        .form-control:focus, .form-select:focus {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: #667eea;
+            color: #e0e0e0;
+        }
+        .stats-card {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+        }
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        .status-dot.connected { background: #198754; }
+        .status-dot.disconnected { background: #dc3545; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel" src="app.js"></script>
+</body>
+</html>
