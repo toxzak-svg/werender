@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 
 from werender.core.blender import BlenderNotFoundError, BlenderRenderer
+from werender.network.coordinator import CoordinatorServer
+from werender.network.worker import WorkerNode
 
 
 def cmd_render(args: argparse.Namespace) -> int:
@@ -66,25 +68,15 @@ def cmd_render(args: argparse.Namespace) -> int:
 
 def cmd_coordinator(args: argparse.Namespace) -> int:
     """Start the coordinator server."""
-    print("🎬 WeRender - Coordinator Mode")
-    print("=" * 50)
-    print()
-    print("⚠️  Coordinator mode is not yet implemented.")
-    print("   This will be available in Sprint 3.")
-    print()
-    print("For now, use 'werender render' to test local rendering.")
+    coordinator = CoordinatorServer(port=args.port)
+    coordinator.run()
     return 0
 
 
 def cmd_worker(args: argparse.Namespace) -> int:
     """Start as a worker node."""
-    print("🎬 WeRender - Worker Mode")
-    print("=" * 50)
-    print()
-    print("⚠️  Worker mode is not yet implemented.")
-    print("   This will be available in Sprint 2.")
-    print()
-    print("For now, use 'werender render' to test local rendering.")
+    worker = WorkerNode(name=args.name)
+    worker.start()
     return 0
 
 

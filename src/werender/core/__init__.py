@@ -1,7 +1,7 @@
-"""Core modules for multirender."""
+"""Core modules for werender."""
 
-from multirender.core.blender import BlenderRenderer, RenderResult
-from multirender.core.job import FrameTask, RenderJob, TaskStatus
+from werender.core.blender import BlenderRenderer, RenderResult
+from werender.core.job import FrameTask, RenderJob, TaskStatus
 
 __all__ = [
     "BlenderRenderer",
