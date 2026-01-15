@@ -16,7 +16,10 @@ from pydantic import BaseModel
 
 from werender.core.blender import BlenderRenderer
 from werender.core.job import RenderJob, TaskStatus
+from werender.core.job import RenderJob, TaskStatus
 from werender.network.discovery import DiscoveryService, NodeInfo
+from werender.network.sync import SyncManager
+
 
 
 class WorkerInfo(BaseModel):
@@ -73,7 +76,16 @@ class CoordinatorServer:
                 "hostname": socket.gethostname(),
                 "cpu_cores": self.specs.cpu_cores,
                 "blender_version": self.blender_version,
+                "blender_version": self.blender_version,
             },
+        )
+
+        # Sync Manager
+        self.config_dir = Path.home() / ".werender"
+        self.config_dir.mkdir(exist_ok=True)
+        self.sync_manager = SyncManager(
+            config_path=self.config_dir / "werender.json",
+            addons_dir=self.config_dir / "addons",
         )
 
         # Setup FastAPI app
@@ -102,6 +114,12 @@ class CoordinatorServer:
 
         # Worker management endpoints
         self.app.get("/api/workers")(self._api_list_workers)
+
+        # Sync endpoints
+        self.app.get("/api/sync/manifest")(self._api_get_sync_manifest)
+        self.app.get("/api/sync/settings")(self._api_get_settings)
+        self.app.get("/api/sync/addons")(self._api_list_addons)
+        self.app.get("/api/sync/addons/{addon_name}/download")(self._api_download_addon)
 
         # WebSocket endpoint
         self.app.websocket("/ws")(self._websocket_endpoint)
@@ -462,7 +480,40 @@ class CoordinatorServer:
             for w in self.workers.values()
         ]
 
+
+
+    async def _api_get_sync_manifest(self) -> dict:
+        """API: Get synchronization manifest."""
+        return self.sync_manager.get_manifest()
+
+    async def _api_get_settings(self) -> dict:
+        """API: Get global settings."""
+        return self.sync_manager.get_settings()
+
+    async def _api_list_addons(self) -> list[dict]:
+        """API: List available add-ons."""
+        return self.sync_manager.get_addons_list()
+
+    async def _api_download_addon(self, addon_name: str) -> FileResponse:
+        """API: Download an add-on zip."""
+        addons = self.sync_manager.get_addons_list()
+        target_addon = next((a for a in addons if a["name"] == addon_name), None)
+        
+        if not target_addon:
+             raise HTTPException(status_code=404, detail="Add-on not found")
+        
+        addon_path = self.sync_manager.addons_dir / target_addon["filename"]
+        if not addon_path.exists():
+            raise HTTPException(status_code=404, detail="Add-on file missing")
+
+        return FileResponse(
+            addon_path,
+            media_type="application/zip",
+            filename=addon_path.name,
+        )
+
     async def _websocket_endpoint(self, websocket: WebSocket) -> None:
+
         """WebSocket endpoint for real-time updates."""
         await websocket.accept()
         self.websocket_connections.append(websocket)

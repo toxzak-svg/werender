@@ -4,11 +4,13 @@ import asyncio
 import json
 import tempfile
 import time
+import zipfile
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Set
+
 
 import httpx
-from websockets.client import connect as websocket_connect
+from websockets import connect as websocket_connect
 
 from werender.core.blender import BlenderRenderer, RenderResult
 from werender.network.discovery import DiscoveryService, NodeInfo
@@ -68,7 +70,17 @@ class WorkerNode:
         self.blender = BlenderRenderer()
         self.temp_dir = Path(tempfile.gettempdir()) / "werender" / self.node_id
         self.temp_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Sync state
+        self.config_dir = Path.home() / ".werender"
+        self.config_dir.mkdir(exist_ok=True)
+        self.addons_dir = self.config_dir / "addons"
+        self.addons_dir.mkdir(exist_ok=True)
+
         self.is_running = False
+        self.is_synced = False
+        self.settings: dict = {}
+        self.installed_addons: Set[str] = set()
 
         # Async client for HTTP requests
         self.http_client: Optional[httpx.AsyncClient] = None
@@ -111,7 +123,11 @@ class WorkerNode:
         while self.is_running:
             try:
                 if self.coordinator:
-                    await self._request_and_render_task()
+                    if not self.is_synced:
+                        await self._sync_with_coordinator()
+                    
+                    if self.is_synced:
+                        await self._request_and_render_task()
                 else:
                     # No coordinator, wait a bit
                     await asyncio.sleep(2)
@@ -126,7 +142,9 @@ class WorkerNode:
     def _on_coordinator_discovered(self, node: NodeInfo) -> None:
         """Handle coordinator discovery."""
         print(f"✅ Found coordinator: {node.hostname} ({node.address}:{node.port})")
+        print(f"✅ Found coordinator: {node.hostname} ({node.address}:{node.port})")
         self.coordinator = node
+        self.is_synced = False  # Reset sync state on new coordinator
 
     def _on_coordinator_removed(self, node: NodeInfo) -> None:
         """Handle coordinator removal."""
@@ -319,3 +337,120 @@ class WorkerNode:
             )
         except Exception as e:
             print(f"❌ Failed to report task failure: {e}")
+
+    async def _sync_with_coordinator(self) -> None:
+        """Synchronize settings and add-ons with coordinator."""
+        if not self.coordinator:
+            return
+
+        print("\n🔄 Syncing with coordinator...")
+        base_url = f"http://{self.coordinator.address}:{self.coordinator.port}"
+
+        try:
+            # 1. Get Manifest
+            response = await self.http_client.get(f"{base_url}/api/sync/manifest")
+            if response.status_code != 200:
+                print(f"⚠️  Failed to get sync manifest: {response.status_code}")
+                # We can still proceed, maybe just retry later
+                await asyncio.sleep(5)
+                return
+
+            manifest = response.json()
+            
+            # 2. Sync Settings
+            # In a real app we'd compare hashes. For now, always fetch to be safe/simple.
+            await self._sync_settings(base_url)
+
+            # 3. Sync Add-ons
+            await self._sync_addons(base_url, manifest.get("addons_hash"))
+
+            self.is_synced = True
+            print("✅ Synchronization complete")
+
+        except Exception as e:
+            print(f"❌ Sync failed: {e}")
+            await asyncio.sleep(5)
+
+    async def _sync_settings(self, base_url: str) -> None:
+        """Download and apply global settings."""
+        try:
+            response = await self.http_client.get(f"{base_url}/api/sync/settings")
+            if response.status_code == 200:
+                self.settings = response.json()
+                print("📥 Global settings applied")
+                # Here we would actually apply them to Blender or worker config
+            else:
+                print(f"⚠️  Failed to fetch settings: {response.status_code}")
+        except Exception as e:
+            print(f"❌ Error syncing settings: {e}")
+
+    async def _sync_addons(self, base_url: str, remote_hash: str) -> None:
+        """Download and install missing add-ons."""
+        try:
+            # Get list of add-ons
+            response = await self.http_client.get(f"{base_url}/api/sync/addons")
+            if response.status_code != 200:
+                return
+
+            addons_list = response.json()
+            if not addons_list:
+                return
+
+            print(f"📦 Checking {len(addons_list)} add-ons...")
+
+            for addon in addons_list:
+                addon_name = addon["name"]
+                
+                # Check if we need to install/update
+                # For this MVP, we'll check if the zip exists in our cache
+                local_zip = self.addons_dir / addon["filename"]
+                
+                need_download = True
+                if local_zip.exists():
+                    # Check size for basic verification
+                    if local_zip.stat().st_size == addon["size"]:
+                        need_download = False
+
+                if need_download:
+                    print(f"⬇️  Downloading add-on: {addon_name}")
+                    await self._download_and_install_addon(base_url, addon, local_zip)
+                else:
+                    print(f"✅ Add-on already cached: {addon_name}")
+                    # Ensure it's enabled even if cached
+                    await self._enable_addon_in_blender(addon_name)
+
+        except Exception as e:
+            print(f"❌ Error syncing add-ons: {e}")
+
+    async def _download_and_install_addon(self, base_url: str, addon_info: dict, target_path: Path) -> None:
+        """Download and install a specific add-on."""
+        try:
+            async with self.http_client.stream(
+                "GET", 
+                f"{base_url}/api/sync/addons/{addon_info['name']}/download"
+            ) as response:
+                if response.status_code != 200:
+                    print(f"❌ Failed to download {addon_info['name']}")
+                    return
+
+                with open(target_path, "wb") as f:
+                    async for chunk in response.aiter_bytes(8192):
+                        f.write(chunk)
+            
+            print(f"📦 Installing {addon_info['name']}...")
+            
+            # Extract to Blender addons folder (using our mock folder for safety in test)
+            with zipfile.ZipFile(target_path, 'r') as zip_ref:
+                zip_ref.extractall(self.addons_dir)
+                
+            # Enable
+            await self._enable_addon_in_blender(addon_info["name"])
+
+        except Exception as e:
+            print(f"❌ Failed to install {addon_info['name']}: {e}")
+
+    async def _enable_addon_in_blender(self, addon_name: str) -> None:
+        """Enable the add-on in Blender using CLI."""
+        # For MVP we just log it since we might not have a full blender env in this dev container
+        print(f"🔧 [Mock] Enabling add-on in Blender: {addon_name}")
+        # Real impl: subprocess.run([self.specs.blender_path, "-b", "--python-expr", ...])

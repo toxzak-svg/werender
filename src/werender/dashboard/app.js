@@ -338,11 +338,42 @@ function ConnectionStatus({ connected }) {
     );
 }
 
+
+function AddonList({ addons }) {
+    return (
+        <div className="card mb-3">
+            <div className="card-header">
+                <h5 className="mb-0">
+                    <i className="bi bi-box-seam me-2"></i>Distributable Add-ons
+                </h5>
+            </div>
+            <div className="card-body">
+                {addons.length === 0 ? (
+                    <p className="text-muted mb-0">No add-ons configured for distribution.</p>
+                ) : (
+                    <div className="list-group list-group-flush">
+                        {addons.map(addon => (
+                            <div key={addon.name} className="list-group-item bg-transparent text-light d-flex justify-content-between align-items-center border-bottom border-secondary">
+                                <div>
+                                    <h6 className="mb-1">{addon.name}</h6>
+                                    <small className="text-muted">{addon.filename}</small>
+                                </div>
+                                <span className="badge bg-secondary">{Math.round(addon.size / 1024)} KB</span>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
 // ============ Main App ============
 
 function App() {
     const [jobs, setJobs] = useState([]);
     const [workers, setWorkers] = useState([]);
+    const [addons, setAddons] = useState([]);
     const [wsConnected, setWsConnected] = useState(false);
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [loading, setLoading] = useState(true);
@@ -351,12 +382,17 @@ function App() {
     useEffect(() => {
         async function fetchData() {
             try {
-                const [jobsData, workersData] = await Promise.all([
+                const [jobsData, workersData, addonsData] = await Promise.all([
                     apiRequest('/jobs'),
                     apiRequest('/workers'),
+                    apiRequest('/sync/addons').catch(e => {
+                        console.warn('Addons fetch failed', e);
+                        return [];
+                    }),
                 ]);
                 setJobs(jobsData);
                 setWorkers(workersData);
+                setAddons(addonsData);
             } catch (error) {
                 console.error('Failed to fetch initial data:', error);
             } finally {
@@ -396,6 +432,7 @@ function App() {
             if (data.workers) {
                 setWorkers(data.workers);
             }
+            // Add-ons usually don't change often, but we could add a listener here if we wanted real-time updates for them too.
         };
 
         return () => {
@@ -403,6 +440,7 @@ function App() {
         };
     }, []);
 
+    // ... (rest of handlers same as before)
     // Job control handlers
     const handleStartJob = async (jobId) => {
         try {
@@ -581,6 +619,9 @@ function App() {
                                         )}
                                     </div>
                                 </div>
+
+                                {/* Add-ons Card */}
+                                <AddonList addons={addons} />
                             </div>
                         </div>
                     </>
