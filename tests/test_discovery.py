@@ -28,6 +28,9 @@ def test_node_info_parsing():
 
 def test_discovery_service_property_decoding(caplog):
     """Test that discovery service handles malformed properties gracefully."""
+    import logging
+    caplog.set_level(logging.DEBUG)
+
     service = DiscoveryService("worker", 8080, "test-id", {})
     
     # Create a mock ServiceInfo with a property that fails decoding
@@ -51,6 +54,10 @@ def test_discovery_service_property_decoding(caplog):
     # or by testing the private method if possible/easy.
     # The method is _handle_service_added.
     
+    # Mock service.service_info since we didn't call start()
+    service.service_info = MagicMock()
+    service.service_info.name = "my-service"
+
     with patch("werender.network.discovery.socket.inet_ntoa", return_value="127.0.0.1"):
         service._handle_service_added(mock_info)
         
