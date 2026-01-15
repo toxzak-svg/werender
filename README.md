@@ -2,16 +2,27 @@
 
 **Zero-Config Peer-to-Peer Distributed Render Manager for Blender**
 
-Turn any collection of computers on your network into a render farm. No server setup, no IP configuration—just open the app and start rendering.
+Turn any collection of networking computers into a render farm instantly.
+
+[Architecture](docs/architecture.md) | [User Guide](docs/user_guide.md) | [Development](docs/development.md)
+
+---
+
+## What is WeRender?
+
+WeRender is a lightweight tool that distributes Blender rendering tasks across multiple computers on your local network. It is designed to be **Zero-Config**:
+
+1. **Open WeRender** on your main PC (Coordinator).
+2. **Open WeRender** on any other PC (Worker).
+3. **Start Rendering**. The workers automatically find the coordinator, download the project, and start helping.
 
 ## Features
 
-- 🔍 **Zero Configuration** - Automatic discovery via mDNS (Zeroconf)
-- 🎬 **Blender Native** - Built for Cycles and Eevee
-- 📦 **Pack & Go** - Automatic asset packing, no missing textures
-- 💪 **Fault Tolerant** - Auto-recovery when workers disconnect
-- 📊 **Real-time Dashboard** - Monitor from any device on your network
-- 🌐 **Web Interface** - Control jobs and workers from your browser
+- 🔍 **Zero Configuration** - Automatic discovery via mDNS (Zeroconf).
+- 🎬 **Blender Native** - Works with standard `.blend` files (Cycles & Eevee).
+- 📦 **Automatic Asset Packing** - No missing textures; files are packed and sent to workers automatically.
+- 💪 **Fault Tolerant** - If a worker crashes or disconnects, its frames are reassigned.
+- 📊 **Web Dashboard** - Real-time monitoring from any browser on the network.
 
 ## Quick Start
 
@@ -21,97 +32,27 @@ Turn any collection of computers on your network into a render farm. No server s
 pip install werender
 ```
 
-### As Coordinator (Main PC)
+### Usage
+
+**On your Main PC (Coordinator):**
 
 ```bash
-werender coordinator --file myproject.blend --frames 1-100
+werender coordinator --file myproject.blend
 ```
 
-Then open your browser to `http://localhost:8420` to view the dashboard!
-
-### As Worker (Other Machines)
+**On other machines (Workers):**
 
 ```bash
 werender worker
 ```
 
-Workers automatically discover the coordinator and start rendering!
+For more detailed instructions, see the [User Guide](docs/user_guide.md).
 
-## Dashboard Features
+## Documentation
 
-The web dashboard (available at `http://localhost:8420`) provides:
-
-- **Real-time Monitoring**: Watch jobs progress and worker status in real-time
-- **Job Management**: Create, start, pause, resume, and cancel render jobs
-- **Worker Grid**: View all connected workers with their specs and current tasks
-- **Stats Overview**: See total frames, completed frames, running jobs, and active workers
-- **Remote Access**: Monitor and control your render farm from any device on your network
-
-## Requirements
-
-- Python 3.10+
-- Blender 4.0+ (must be installed and accessible)
-- All machines on the same local network
-
-## Development
-
-```bash
-# Clone the repository
-git clone https://github.com/yourusername/werender.git
-cd werender
-
-# Install in development mode
-pip install -e ".[dev]"
-
-# Run tests
-pytest
-```
-
-## Architecture
-
-```
-┌─────────────────┐         ┌─────────────────┐
-│   Coordinator   │◄───────►│    Worker A     │
-│  (Your Main PC) │         │  (Old Laptop)   │
-│                 │         └─────────────────┘
-│  • Job Queue    │
-│  • File Server  │         ┌─────────────────┐
-│  • WebSocket    │◄───────►│    Worker B     │
-│  • Dashboard    │         │  (Desktop)      │
-└─────────────────┘         └─────────────────┘
-        │
-        ▼
-   ┌─────────┐
-   │ Browser │  (Monitor from phone/tablet)
-   └─────────┘
-```
-
-## Commands
-
-### Coordinator Mode
-```bash
-werender coordinator [OPTIONS]
-```
-
-Options:
-- `--file PATH` - Path to .blend file (optional, can upload via dashboard)
-- `--frames START-END` - Frame range (e.g., 1-100)
-- `--port PORT` - Port to run server on (default: 8420)
-
-### Worker Mode
-```bash
-werender worker [OPTIONS]
-```
-
-Options:
-- `--port PORT` - Coordinator port (default: 8420)
-- `--max-concurrent N` - Maximum concurrent tasks (default: 1)
-
-### Info
-```bash
-werender info
-```
-Display system information and Blender version.
+- **[User Guide](docs/user_guide.md)**: Installation, usage, and dashboard features.
+- **[Architecture](docs/architecture.md)**: innovative hub-and-spoke design and data flow.
+- **[Development](docs/development.md)**: Setup for contributors.
 
 ## License
 
