@@ -4,7 +4,10 @@ import asyncio
 import socket
 import threading
 import time
+import logging
 from typing import Callable, Optional
+
+logger = logging.getLogger(__name__)
 
 from zeroconf import ServiceBrowser, ServiceInfo, Zeroconf
 
@@ -139,8 +142,8 @@ class DiscoveryService:
             for key, value in info.properties.items():
                 try:
                     properties[key.decode()] = value.decode()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Failed to decode property {key!r}: {e}")
         if properties.get("node_type") == self.node_type:
             return
         if not info.addresses:

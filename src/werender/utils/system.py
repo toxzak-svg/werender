@@ -4,6 +4,9 @@ from dataclasses import dataclass
 from typing import Optional
 
 import psutil
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -78,8 +81,8 @@ def get_system_specs() -> SystemSpecs:
             if len(parts) >= 2:
                 gpu_name = parts[0]
                 gpu_vram = float(parts[1]) / 1024  # Convert MB to GB
-    except Exception:
-        pass  # GPU detection is optional
+    except Exception as e:
+        logger.debug(f"GPU detection failed: {e}")
 
     return SystemSpecs(
         hostname=socket.gethostname(),
