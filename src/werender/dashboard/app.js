@@ -4,13 +4,7 @@ const { useState, useEffect, useCallback } = React;
 const API_BASE = '/api';
 
 async function apiRequest(endpoint, options = {}) {
-    const response = await fetch(`${API_BASE}${endpoint}`, {
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers,
-        },
-    });
+    const response = await fetch(`${API_BASE}${endpoint}`, options);
     if (!response.ok) {
         throw new Error(`API Error: ${response.status}`);
     }
@@ -205,14 +199,13 @@ function CreateJobModal({ show, onHide, onCreate }) {
         try {
             const formData = new FormData();
             formData.append('file', file);
-            formData.append('name', name);
+            if (name) formData.append('name', name);
             formData.append('frame_start', frameStart);
             formData.append('frame_end', frameEnd);
 
             const result = await apiRequest('/jobs/create', {
                 method: 'POST',
                 body: formData,
-                headers: {}, // Let browser set Content-Type for FormData
             });
 
             onCreate(result);
