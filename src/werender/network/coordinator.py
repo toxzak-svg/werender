@@ -33,6 +33,13 @@ class WorkerInfo(BaseModel):
     current_task_id: Optional[str] = None
 
 
+class UpdateJobRequest(BaseModel):
+    """Request to update job properties."""
+
+    start_frame: Optional[int] = None
+    end_frame: Optional[int] = None
+
+
 class CoordinatorServer:
     """Coordinator server that manages jobs and distributes tasks."""
 
@@ -107,10 +114,12 @@ class CoordinatorServer:
         self.app.post("/api/jobs/create")(self._api_create_job)
         self.app.get("/api/jobs")(self._api_list_jobs)
         self.app.get("/api/jobs/{job_id}")(self._api_get_job)
+        self.app.patch("/api/jobs/{job_id}")(self._api_update_job)
         self.app.post("/api/jobs/{job_id}/start")(self._api_start_job)
         self.app.post("/api/jobs/{job_id}/pause")(self._api_pause_job)
         self.app.post("/api/jobs/{job_id}/resume")(self._api_resume_job)
         self.app.post("/api/jobs/{job_id}/cancel")(self._api_cancel_job)
+        self.app.post("/api/jobs/{job_id}/reload_blend")(self._api_reload_blend)
 
         # Worker management endpoints
         self.app.get("/api/workers")(self._api_list_workers)
@@ -465,6 +474,117 @@ class CoordinatorServer:
         print(f"❌ Job {job.name} cancelled")
         await self._broadcast_update("jobs")
         return {"status": "cancelled"}
+
+    async def _api_update_job(self, job_id: str, request: UpdateJobRequest) -> dict:
+        """API: Update job properties (frame range)."""
+        job = self.jobs.get(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        # Check if job is in a state that allows updates
+        if job.status in ["running"]:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot update job while it is running. Pause the job first."
+            )
+
+        # Get new frame values (use existing values if not provided)
+        new_start = request.start_frame if request.start_frame is not None else job.frame_start
+        new_end = request.end_frame if request.end_frame is not None else job.frame_end
+
+        # Validate frame range
+        if new_start > new_end:
+            raise HTTPException(
+                status_code=400,
+                detail="start_frame must be less than or equal to end_frame"
+            )
+
+        # Update job frame range
+        job.frame_start = new_start
+        job.frame_end = new_end
+
+        # Regenerate tasks for new frame range
+        job.create_tasks()
+
+        # Reset job status if it was completed
+        if job.status == "completed":
+            job.status = "pending"
+
+        print(f"📝 Job {job.name} updated: frames {new_start}-{new_end}")
+        await self._broadcast_update("jobs")
+
+        return {
+            "id": job.id,
+            "name": job.name,
+            "status": job.status,
+            "progress": job.progress_percent,
+            "total_frames": job.total_frames,
+            "completed_frames": job.completed_frames,
+            "frame_start": job.frame_start,
+            "frame_end": job.frame_end,
+        }
+
+    async def _api_reload_blend(
+        self,
+        job_id: str,
+        blend: UploadFile = File(...),
+    ) -> dict:
+        """API: Re-upload and replace a job's blend file."""
+        job = self.jobs.get(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        # Validate file extension
+        if not blend.filename or not blend.filename.lower().endswith(".blend"):
+            raise HTTPException(
+                status_code=400,
+                detail="File must be a .blend file"
+            )
+
+        # Check if job is in a state that allows updates
+        if job.status in ["running"]:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot reload blend file while job is running. Pause the job first."
+            )
+
+        # Save new blend file
+        temp_dir = Path(tempfile.gettempdir()) / "werender" / "jobs"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+
+        new_blend_path = temp_dir / blend.filename
+        with open(new_blend_path, "wb") as f:
+            shutil.copyfileobj(blend.file, f)
+
+        # Replace existing blend file
+        job.blend_file = new_blend_path
+
+        # Pack resources
+        print(f"📦 Packing resources for job {job.id}...")
+        try:
+            renderer = BlenderRenderer()
+            job.packed_file = renderer.pack_resources(new_blend_path)
+            job.blender_version = renderer.get_version()
+            print(f"✅ Resources packed for job {job.id}")
+        except Exception as e:
+            print(f"⚠️  Warning: Failed to pack resources: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to pack resources: {e}"
+            )
+
+        # Reset job status and tasks
+        job.status = "pending"
+        job.create_tasks()
+
+        print(f"🔄 Blend file reloaded for job {job.name}")
+        await self._broadcast_update("jobs")
+
+        return {
+            "status": "success",
+            "message": "Blend file reloaded successfully",
+            "job_id": job.id,
+        }
 
     async def _api_list_workers(self) -> list[dict]:
         """API: List all connected workers."""

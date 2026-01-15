@@ -317,6 +317,133 @@ function CreateJobModal({ show, onHide, onCreate }) {
     );
 }
 
+function EditJobModal({ show, onHide, job, onUpdate }) {
+    const [frameStart, setFrameStart] = useState(job?.frame_start || 1);
+    const [frameEnd, setFrameEnd] = useState(job?.frame_end || 100);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
+
+    // Update form values when job changes
+    useEffect(() => {
+        if (job) {
+            setFrameStart(job.frame_start);
+            setFrameEnd(job.frame_end);
+        }
+    }, [job]);
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+
+        // Validation
+        if (frameStart > frameEnd) {
+            setError('Start frame must be less than or equal to end frame');
+            return;
+        }
+
+        setLoading(true);
+        setError(null);
+
+        try {
+            const result = await apiRequest(`/jobs/${job.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    frame_start: frameStart,
+                    frame_end: frameEnd,
+                }),
+            });
+
+            onUpdate(result);
+            onHide();
+        } catch (err) {
+            setError('Failed to update job: ' + err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className={`modal fade ${show ? 'show d-block' : ''}`} tabIndex="-1">
+            <div className="modal-dialog">
+                <div className="modal-content">
+                    <div className="modal-header">
+                        <h5 className="modal-title">
+                            <i className="bi bi-pencil me-2"></i>Edit Job
+                        </h5>
+                        <button type="button" className="btn-close btn-close-white" onClick={onHide}></button>
+                    </div>
+                    <form onSubmit={handleSubmit}>
+                        <div className="modal-body">
+                            {error && (
+                                <div className="alert alert-danger">
+                                    <i className="bi bi-exclamation-triangle me-2"></i>
+                                    {error}
+                                </div>
+                            )}
+                            <div className="mb-3">
+                                <label className="form-label">Job Name</label>
+                                <input
+                                    type="text"
+                                    className="form-control"
+                                    value={job?.name || ''}
+                                    disabled
+                                />
+                                <small className="text-muted">Job name cannot be changed</small>
+                            </div>
+                            <div className="row">
+                                <div className="col-6">
+                                    <label className="form-label">Start Frame</label>
+                                    <input
+                                        type="number"
+                                        className="form-control"
+                                        value={frameStart}
+                                        onChange={(e) => setFrameStart(parseInt(e.target.value))}
+                                        min="0"
+                                        required
+                                    />
+                                </div>
+                                <div className="col-6">
+                                    <label className="form-label">End Frame</label>
+                                    <input
+                                        type="number"
+                                        className="form-control"
+                                        value={frameEnd}
+                                        onChange={(e) => setFrameEnd(parseInt(e.target.value))}
+                                        min="0"
+                                        required
+                                    />
+                                </div>
+                            </div>
+                            <div className="mt-2">
+                                <small className="text-muted">
+                                    Total frames: <strong>{Math.max(0, frameEnd - frameStart + 1)}</strong>
+                                </small>
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button type="button" className="btn btn-secondary" onClick={onHide}>
+                                Cancel
+                            </button>
+                            <button type="submit" className="btn btn-primary" disabled={loading}>
+                                {loading ? (
+                                    <>
+                                        <span className="spinner-border spinner-border-sm me-2"></span>
+                                        Updating...
+                                    </>
+                                ) : (
+                                    <>
+                                        <i className="bi bi-check-circle me-1"></i>Update Job
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 function StatsCard({ icon, label, value, color }) {
     return (
         <div className="card stats-card">
