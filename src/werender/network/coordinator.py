@@ -16,7 +16,6 @@ from pydantic import BaseModel
 
 from werender.core.blender import BlenderRenderer
 from werender.core.job import RenderJob, TaskStatus
-from werender.core.job import RenderJob, TaskStatus
 from werender.network.discovery import DiscoveryService, NodeInfo
 from werender.network.sync import SyncManager
 
@@ -82,7 +81,6 @@ class CoordinatorServer:
             properties={
                 "hostname": socket.gethostname(),
                 "cpu_cores": self.specs.cpu_cores,
-                "blender_version": self.blender_version,
                 "blender_version": self.blender_version,
             },
         )
@@ -399,23 +397,28 @@ class CoordinatorServer:
                 "progress": job.progress_percent,
                 "total_frames": job.total_frames,
                 "completed_frames": job.completed_frames,
+                "frame_start": job.frame_start,  # BUG FIX: Missing frame_start
+                "frame_end": job.frame_end,      # BUG FIX: Missing frame_end
             }
             for job in self.jobs.values()
         ]
 
     async def _api_get_job(self, job_id: str) -> dict:
         """API: Get job details."""
+        print(f"[DEBUG] _api_get_job called with job_id={job_id}")
         job = self.jobs.get(job_id)
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
 
-        return {
+        result = {
             "id": job.id,
             "name": job.name,
             "status": job.status,
             "progress": job.progress_percent,
             "total_frames": job.total_frames,
             "completed_frames": job.completed_frames,
+            "frame_start": job.frame_start,  # BUG FIX: Missing frame_start
+            "frame_end": job.frame_end,      # BUG FIX: Missing frame_end
             "tasks": [
                 {
                     "id": t.id,
@@ -425,6 +428,8 @@ class CoordinatorServer:
                 for t in job.tasks
             ],
         }
+        print(f"[DEBUG] _api_get_job returning: {result}")
+        return result
 
     async def _api_start_job(self, job_id: str) -> dict:
         """API: Start a job."""
@@ -477,6 +482,7 @@ class CoordinatorServer:
 
     async def _api_update_job(self, job_id: str, request: UpdateJobRequest) -> dict:
         """API: Update job properties (frame range)."""
+        print(f"[DEBUG] _api_update_job called with job_id={job_id}, request={request}")
         job = self.jobs.get(job_id)
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
@@ -530,6 +536,7 @@ class CoordinatorServer:
         blend: UploadFile = File(...),
     ) -> dict:
         """API: Re-upload and replace a job's blend file."""
+        print(f"[DEBUG] _api_reload_blend called with job_id={job_id}, blend.filename={blend.filename}")
         job = self.jobs.get(job_id)
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")

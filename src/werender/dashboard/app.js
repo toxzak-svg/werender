@@ -6,7 +6,10 @@ const API_BASE = '/api';
 async function apiRequest(endpoint, options = {}) {
     const response = await fetch(`${API_BASE}${endpoint}`, options);
     if (!response.ok) {
-        throw new Error(`API Error: ${response.status}`);
+        console.error('[DEBUG] API Error:', response.status, response.statusText);
+        const errorText = await response.text();
+        console.error('[DEBUG] API Error body:', errorText);
+        throw new Error(`API Error: ${response.status} - ${errorText}`);
     }
     return response.json();
 }
@@ -88,7 +91,7 @@ function WorkerCard({ worker }) {
     );
 }
 
-function JobCard({ job, onStart, onPause, onResume, onCancel }) {
+function JobCard({ job, onStart, onPause, onResume, onCancel, onEdit, onDownloadBlend, onReloadBlend }) {
     const [isExpanded, setIsExpanded] = useState(false);
 
     return (
@@ -131,6 +134,29 @@ function JobCard({ job, onStart, onPause, onResume, onCancel }) {
                     </div>
                 </div>
 
+                {/* Action Buttons */}
+                <div className="d-flex gap-2 mb-2">
+                    <button
+                        className="btn btn-outline-secondary btn-sm flex-grow-1"
+                        onClick={() => onEdit(job)}
+                    >
+                        <i className="bi bi-pencil me-1"></i>Edit
+                    </button>
+                    <button
+                        className="btn btn-outline-info btn-sm flex-grow-1"
+                        onClick={() => onDownloadBlend(job.id)}
+                    >
+                        <i className="bi bi-download me-1"></i>Blend
+                    </button>
+                    <button
+                        className="btn btn-outline-warning btn-sm flex-grow-1"
+                        onClick={() => onReloadBlend(job)}
+                    >
+                        <i className="bi bi-arrow-repeat me-1"></i>Reload
+                    </button>
+                </div>
+
+                {/* Job Control Buttons */}
                 <div className="d-flex gap-2">
                     {job.status === 'pending' && (
                         <button
@@ -325,7 +351,9 @@ function EditJobModal({ show, onHide, job, onUpdate }) {
 
     // Update form values when job changes
     useEffect(() => {
+        console.log('[DEBUG] EditJobModal job prop:', job);
         if (job) {
+            console.log('[DEBUG] EditJobModal frame_start:', job.frame_start, 'frame_end:', job.frame_end);
             setFrameStart(job.frame_start);
             setFrameEnd(job.frame_end);
         }
@@ -344,19 +372,42 @@ function EditJobModal({ show, onHide, job, onUpdate }) {
         setError(null);
 
         try {
+            const requestBody = {
+                start_frame: frameStart,  // BUG FIX: Changed from frame_start to start_frame
+                end_frame: frameEnd,      // BUG FIX: Changed from frame_end to end_frame
+            };
+            console.log('[DEBUG] EditJobModal PATCH request body:', requestBody);
             const result = await apiRequest(`/jobs/${job.id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    frame_start: frameStart,
-                    frame_end: frameEnd,
-                }),
+                body: JSON.stringify(requestBody),
             });
+            console.log('[DEBUG] EditJobModal PATCH response:', result);
 
             onUpdate(result);
             onHide();
         } catch (err) {
-            setError('Failed to update job: ' + err.message);
+            // BUG FIX: Show actual error message from server
+            let errorMsg = 'Failed to update job';
+            if (err.message.includes('API Error:')) {
+                // Extract the actual error message from the API error
+                const match = err.message.match(/API Error: \d+ - (.+)/);
+                if (match && match[1]) {
+                    try {
+                        const errorData = JSON.parse(match[1]);
+                        if (errorData.detail) {
+                            errorMsg = errorData.detail;
+                        } else {
+                            errorMsg = match[1];
+                        }
+                    } catch (e) {
+                        errorMsg = match[1];
+                    }
+                }
+            } else {
+                errorMsg = err.message;
+            }
+            setError(errorMsg);
         } finally {
             setLoading(false);
         }
@@ -444,6 +495,158 @@ function EditJobModal({ show, onHide, job, onUpdate }) {
     );
 }
 
+function ReloadBlendModal({ show, onHide, job, onReload }) {
+    const [file, setFile] = useState(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
+    const [progress, setProgress] = useState(0);
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!file) {
+            setError('Please select a .blend file');
+            return;
+        }
+
+        setLoading(true);
+        setError(null);
+        setProgress(0);
+
+        try {
+            const formData = new FormData();
+            formData.append('blend', file);  // BUG FIX: Changed from 'file' to 'blend'
+            console.log('[DEBUG] ReloadBlendModal FormData:', formData.get('blend'));
+
+            // Use XMLHttpRequest for upload progress
+            const xhr = new XMLHttpRequest();
+
+            xhr.upload.addEventListener('progress', (e) => {
+                if (e.lengthComputable) {
+                    setProgress(Math.round((e.loaded / e.total) * 100));
+                }
+            });
+
+            xhr.addEventListener('load', () => {
+                console.log('[DEBUG] ReloadBlendModal XHR status:', xhr.status);
+                console.log('[DEBUG] ReloadBlendModal XHR response:', xhr.responseText);
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    const result = JSON.parse(xhr.responseText);
+                    onReload(result);
+                    setFile(null);
+                    setProgress(0);
+                    setLoading(false); // BUG FIX: Missing setLoading(false)
+                    onHide();
+                } else {
+                    // BUG FIX: Show actual error message from server
+                    let errorMsg = 'Failed to reload blend file';
+                    try {
+                        const errorData = JSON.parse(xhr.responseText);
+                        if (errorData.detail) {
+                            errorMsg = errorData.detail;
+                        }
+                    } catch (e) {
+                        // If not JSON, use status text
+                        errorMsg = `Server error: ${xhr.status} ${xhr.statusText}`;
+                    }
+                    setError(errorMsg);
+                    setLoading(false);
+                }
+            });
+
+            xhr.addEventListener('error', () => {
+                setError('Network error while uploading file');
+                setLoading(false);
+            });
+
+            xhr.open('POST', `${API_BASE}/jobs/${job.id}/reload_blend`);
+            xhr.send(formData);
+        } catch (err) {
+            setError('Failed to reload blend file: ' + err.message);
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className={`modal fade ${show ? 'show d-block' : ''}`} tabIndex="-1">
+            <div className="modal-dialog">
+                <div className="modal-content">
+                    <div className="modal-header">
+                        <h5 className="modal-title">
+                            <i className="bi bi-arrow-repeat me-2"></i>Reload Blend File
+                        </h5>
+                        <button type="button" className="btn-close btn-close-white" onClick={onHide}></button>
+                    </div>
+                    <form onSubmit={handleSubmit}>
+                        <div className="modal-body">
+                            {error && (
+                                <div className="alert alert-danger">
+                                    <i className="bi bi-exclamation-triangle me-2"></i>
+                                    {error}
+                                </div>
+                            )}
+                            <div className="mb-3">
+                                <label className="form-label">Job Name</label>
+                                <input
+                                    type="text"
+                                    className="form-control"
+                                    value={job?.name || ''}
+                                    disabled
+                                />
+                            </div>
+                            <div className="mb-3">
+                                <label className="form-label">New Blender File (.blend)</label>
+                                <input
+                                    type="file"
+                                    className="form-control"
+                                    accept=".blend"
+                                    onChange={(e) => setFile(e.target.files[0])}
+                                    required
+                                    disabled={loading}
+                                />
+                                <small className="text-muted">
+                                    <i className="bi bi-info-circle me-1"></i>
+                                    This will replace the existing blend file for this job
+                                </small>
+                            </div>
+                            {loading && (
+                                <div className="mb-3">
+                                    <div className="d-flex justify-content-between mb-1">
+                                        <small>Uploading...</small>
+                                        <small>{progress}%</small>
+                                    </div>
+                                    <div className="progress" style={{ height: '8px' }}>
+                                        <div
+                                            className="progress-bar bg-info"
+                                            style={{ width: `${progress}%` }}
+                                        ></div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        <div className="modal-footer">
+                            <button type="button" className="btn btn-secondary" onClick={onHide} disabled={loading}>
+                                Cancel
+                            </button>
+                            <button type="submit" className="btn btn-primary" disabled={loading}>
+                                {loading ? (
+                                    <>
+                                        <span className="spinner-border spinner-border-sm me-2"></span>
+                                        Uploading...
+                                    </>
+                                ) : (
+                                    <>
+                                        <i className="bi bi-upload me-1"></i>Reload Blend
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 function StatsCard({ icon, label, value, color }) {
     return (
         <div className="card stats-card">
@@ -503,6 +706,9 @@ function App() {
     const [addons, setAddons] = useState([]);
     const [wsConnected, setWsConnected] = useState(false);
     const [showCreateModal, setShowCreateModal] = useState(false);
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [showReloadModal, setShowReloadModal] = useState(false);
+    const [selectedJob, setSelectedJob] = useState(null);
     const [loading, setLoading] = useState(true);
 
     // Fetch initial data
@@ -551,7 +757,7 @@ function App() {
 
         ws.onmessage = (event) => {
             const data = JSON.parse(event.data);
-            console.log('WebSocket update:', data);
+            console.log('[DEBUG] WebSocket update:', data);
 
             if (data.jobs) {
                 setJobs(data.jobs);
@@ -609,6 +815,59 @@ function App() {
     const handleCreateJob = (result) => {
         console.log('Job created:', result);
         // Data will be updated via WebSocket
+    };
+
+    const handleEditJob = (job) => {
+        setSelectedJob(job);
+        setShowEditModal(true);
+    };
+
+    const handleUpdateJob = (result) => {
+        console.log('Job updated:', result);
+        // Data will be updated via WebSocket
+        setShowEditModal(false);
+    };
+
+    const handleDownloadBlend = async (jobId) => {
+        try {
+            const response = await fetch(`${API_BASE}/jobs/${jobId}/blend`);
+            if (!response.ok) {
+                throw new Error('Failed to download blend file');
+            }
+            // Get filename from Content-Disposition header
+            const contentDisposition = response.headers.get('Content-Disposition');
+            let filename = `job_${jobId}.blend`;
+            if (contentDisposition) {
+                const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+                if (filenameMatch && filenameMatch[1]) {
+                    filename = filenameMatch[1].replace(/['"]/g, '');
+                }
+            }
+            // Create blob and trigger download
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        } catch (error) {
+            console.error('Failed to download blend file:', error);
+            alert('Failed to download blend file');
+        }
+    };
+
+    const handleReloadBlend = (job) => {
+        setSelectedJob(job);
+        setShowReloadModal(true);
+    };
+
+    const handleReloadBlendSubmit = (result) => {
+        console.log('Blend file reloaded:', result);
+        // Data will be updated via WebSocket
+        setShowReloadModal(false);
     };
 
     // Calculate stats
@@ -715,6 +974,9 @@ function App() {
                                                     onPause={handlePauseJob}
                                                     onResume={handleResumeJob}
                                                     onCancel={handleCancelJob}
+                                                    onEdit={handleEditJob}
+                                                    onDownloadBlend={handleDownloadBlend}
+                                                    onReloadBlend={handleReloadBlend}
                                                 />
                                             ))
                                         )}
@@ -762,8 +1024,26 @@ function App() {
                 onCreate={handleCreateJob}
             />
 
+            {/* Edit Job Modal */}
+            <EditJobModal
+                show={showEditModal}
+                onHide={() => setShowEditModal(false)}
+                job={selectedJob}
+                onUpdate={handleUpdateJob}
+            />
+
+            {/* Reload Blend Modal */}
+            <ReloadBlendModal
+                show={showReloadModal}
+                onHide={() => setShowReloadModal(false)}
+                job={selectedJob}
+                onReload={handleReloadBlendSubmit}
+            />
+
             {/* Backdrop */}
-            {showCreateModal && <div className="modal-backdrop fade show" style={{ zIndex: 1040 }}></div>}
+            {(showCreateModal || showEditModal || showReloadModal) && (
+                <div className="modal-backdrop fade show" style={{ zIndex: 1040 }}></div>
+            )}
         </>
     );
 }
