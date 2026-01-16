@@ -131,7 +131,8 @@ def client(coordinator):
     """Create a FastAPI TestClient."""
     # Store coordinator reference in app state for easy access
     coordinator.app.state.coordinator = coordinator
-    return TestClient(coordinator.app)
+    client = TestClient(coordinator.app)
+    return client
 
 
 # ============================================================================
