@@ -62,9 +62,13 @@ class TestCmdRender:
         assert result == 1
         mock_renderer.assert_not_called()
 
-    @patch("werender.main.BlenderRenderer", side_effect=Exception("Blender not found"))
-    def test_cmd_render_blender_not_found(self, mock_renderer, mock_temp_file, tmp_path):
+    @patch("werender.core.blender.subprocess")
+    def test_cmd_render_blender_not_found(self, mock_subprocess, mock_temp_file, tmp_path):
         """Test render command when Blender is not found."""
+        from werender.core.blender import BlenderNotFoundError
+        
+        mock_subprocess.run.side_effect = FileNotFoundError("blender not found")
+        
         args = argparse.Namespace(
             file=str(mock_temp_file),
             frames="1",
@@ -197,7 +201,7 @@ class TestCmdInfo:
     """Tests for cmd_info function."""
 
     @patch("werender.main.BlenderRenderer")
-    @patch("werender.main.get_system_specs")
+    @patch("werender.utils.system.get_system_specs")
     def test_cmd_info_success(self, mock_specs, mock_renderer):
         """Test info command with Blender found."""
         # Mock system specs
@@ -222,9 +226,13 @@ class TestCmdInfo:
         assert result == 0
         mock_specs.assert_called_once()
 
-    @patch("werender.main.BlenderRenderer", side_effect=Exception("Not found"))
-    @patch("werender.main.get_system_specs")
-    def test_cmd_info_no_blender(self, mock_specs, mock_renderer):
+    @patch("werender.core.blender.subprocess")
+    @patch("werender.utils.system.get_system_specs")
+    def test_cmd_info_no_blender(self, mock_specs, mock_subprocess):
+        """Test info command without Blender."""
+        from werender.core.blender import BlenderNotFoundError
+        
+        mock_subprocess.run.side_effect = FileNotFoundError("blender not found")
         """Test info command without Blender."""
         # Mock system specs without GPU
         mock_specs.return_value = Mock(
@@ -243,7 +251,7 @@ class TestCmdInfo:
         assert result == 0
 
     @patch("werender.main.BlenderRenderer")
-    @patch("werender.main.get_system_specs")
+    @patch("werender.utils.system.get_system_specs")
     def test_cmd_info_no_gpu(self, mock_specs, mock_renderer):
         """Test info command without GPU."""
         # Mock system specs without GPU

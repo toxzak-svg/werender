@@ -288,8 +288,9 @@ class TestPackageAddon:
 
         # Verify zip contents
         with zipfile.ZipFile(result, "r") as zf:
-            assert "__init__.py" in zf.namelist()
-            assert "main.py" in zf.namelist()
+            names = zf.namelist()
+            assert "test_addon/__init__.py" in names
+            assert "test_addon/main.py" in names
 
     def test_package_addon_file(self, tmp_path):
         """Test packaging a single file as addon."""

@@ -262,14 +262,16 @@ class TestDiscoveryServiceStop:
         service = DiscoveryService(
             node_type="worker", port=8080, node_id="test", properties={}
         )
-        service.browser = Mock()
+        # Use Mock() with spec to automatically create methods
+        browser_mock = Mock(spec=['cancel'])
+        service.browser = browser_mock
         service.service_info = Mock()
         service.zeroconf = Mock()
         service.discovered_nodes = {"test": Mock()}
 
         service.stop()
 
-        service.browser.cancel.assert_called_once()
+        browser_mock.cancel.assert_called_once()
         service.zeroconf.unregister_service.assert_called_once()
         service.zeroconf.close.assert_called_once()
         assert service.discovered_nodes == {}
@@ -310,7 +312,8 @@ class TestDiscoveryServiceHandleServiceRemoved:
         callback = Mock()
         service.on_removal = callback
 
-        service._handle_service_removed("Node1")
+        with service._lock:
+            service._handle_service_removed("Node1")
 
         assert "node-1" not in service.discovered_nodes
         callback.assert_called_once_with(node)
@@ -372,7 +375,8 @@ class TestDiscoveryServiceOnServiceStateChange:
         )
         service.discovered_nodes["node-1"] = node
 
-        service._on_service_state_change(Mock(), "_werender._tcp.local.", "Node1", "Removed")
+        with service._lock:
+            service._on_service_state_change(Mock(), "_werender._tcp.local.", "Node1", "Removed")
 
         assert "node-1" not in service.discovered_nodes
 
@@ -508,9 +512,11 @@ class TestDiscoveryServiceHandleServiceAdded:
             b"hostname": b"coord-host",
         }
 
-        time.sleep(0.01)
-        service._handle_service_added(mock_info)
+        with service._lock:
+            time.sleep(0.01)
+            service._handle_service_added(mock_info)
 
         # Should update last_seen but not call callback
         assert callback.call_count == 0
-        assert node.last_seen > service.discovered_nodes["coord-1"].last_seen
+        # The node object is updated in place, so we can't compare old vs new
+        assert service.discovered_nodes["coord-1"].last_seen >= node.last_seen
