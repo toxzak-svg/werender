@@ -43,6 +43,14 @@ def mock_blender_renderer():
 
 
 @pytest.fixture
+def mock_failing_blender_renderer():
+    """Mock BlenderRenderer that raises exception."""
+    mock_renderer = MagicMock()
+    mock_renderer.get_version.side_effect = Exception("Blender not found")
+    return mock_renderer
+
+
+@pytest.fixture
 def mock_discovery_service():
     """Mock DiscoveryService."""
     mock_discovery = MagicMock()
