@@ -187,9 +187,12 @@ class TestCoordinatorServerInitialization:
 
     def test_init_handles_blender_version_failure(self, mock_system_specs):
         """Test initialization when Blender version check fails."""
-        # Use side_effect on the patch to make BlenderRenderer raise exception
+        # Use 'new' parameter to create a new instance that raises exception
+        mock_failing_renderer = MagicMock()
+        mock_failing_renderer.get_version.side_effect = Exception("Blender not found")
+        
         with patch("werender.utils.system.get_system_specs", return_value=mock_system_specs), \
-             patch("werender.core.blender.BlenderRenderer", side_effect=Exception("Blender not found")), \
+             patch("werender.core.blender.BlenderRenderer", return_value=mock_failing_renderer), \
              patch("werender.network.discovery.DiscoveryService"), \
              patch("werender.network.sync.SyncManager"):
             coordinator = CoordinatorServer()
