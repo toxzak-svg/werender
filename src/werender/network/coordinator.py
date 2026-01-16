@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 import uvicorn
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect, Depends
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -18,6 +18,7 @@ from werender.core.blender import BlenderRenderer
 from werender.core.job import RenderJob, TaskStatus
 from werender.network.discovery import DiscoveryService, NodeInfo
 from werender.network.sync import SyncManager
+from werender.network.auth import AuthManager, get_api_key_dependency
 
 
 
@@ -93,6 +94,9 @@ class CoordinatorServer:
             addons_dir=self.config_dir / "addons",
         )
 
+        # Authentication Manager
+        self.auth_manager = AuthManager(self.config_dir)
+
         # Setup FastAPI app
         self.app = FastAPI(title="WeRender Coordinator")
         self._setup_routes()
@@ -102,11 +106,14 @@ class CoordinatorServer:
         self.app.add_event_handler("startup", self._on_startup)
         self.app.add_event_handler("shutdown", self._on_shutdown)
 
-        # Worker endpoints
-        self.app.get("/api/tasks/request")(self._api_request_task)
-        self.app.post("/api/tasks/{task_id}/complete")(self._api_complete_task)
-        self.app.post("/api/tasks/{task_id}/fail")(self._api_fail_task)
-        self.app.get("/api/jobs/{job_id}/blend")(self._api_get_blend_file)
+        # Create authentication dependencies
+        worker_auth = get_api_key_dependency(self.auth_manager, "worker")
+
+        # Worker endpoints (require worker authentication)
+        self.app.get("/api/tasks/request", dependencies=[Depends(worker_auth)])(self._api_request_task)
+        self.app.post("/api/tasks/{task_id}/complete", dependencies=[Depends(worker_auth)])(self._api_complete_task)
+        self.app.post("/api/tasks/{task_id}/fail", dependencies=[Depends(worker_auth)])(self._api_fail_task)
+        self.app.get("/api/jobs/{job_id}/blend", dependencies=[Depends(worker_auth)])(self._api_get_blend_file)
 
         # Job management endpoints
         self.app.post("/api/jobs/create")(self._api_create_job)
@@ -137,12 +144,15 @@ class CoordinatorServer:
             self.app.mount("/", StaticFiles(directory=str(dashboard_dir), html=True), name="dashboard")
 
     async def _on_startup(self) -> None:
-        """Handle startup event."""
+        """Handle startup event - initialize services and background tasks."""
+        # Start mDNS discovery to find workers on the network
         self.discovery.start()
         self.discovery.on_discovery = self._on_worker_discovered
         self.discovery.on_removal = self._on_worker_removed
 
-        # Start worker health check task
+        # Launch background tasks for monitoring and updates
+        # Health check: monitors worker connectivity and re-queues tasks from dead workers
+        # Broadcast: sends periodic updates to dashboard clients
         asyncio.create_task(self._health_check_loop())
         asyncio.create_task(self._broadcast_updates_loop())
 
@@ -151,30 +161,44 @@ class CoordinatorServer:
         self.discovery.stop()
 
     async def _health_check_loop(self) -> None:
-        """Periodically check worker health."""
+        """
+        Monitor worker health and handle timeouts.
+        
+        Workers must send heartbeat requests every 30 seconds. If a worker
+        doesn't communicate within this window, we assume it's dead and
+        re-queue any assigned task.
+        """
         while True:
             await asyncio.sleep(5)
             current_time = time.time()
 
-            # Check for stale workers
+            # Identify workers that haven't sent a heartbeat recently
             stale_workers = []
             for worker_id, worker_info in self.workers.items():
                 if current_time - worker_info.last_seen > 30:  # 30 second timeout
                     stale_workers.append(worker_id)
 
-            # Re-queue tasks from stale workers
+            # Handle stale workers: re-queue their tasks and remove them
             for worker_id in stale_workers:
                 worker = self.workers[worker_id]
+                
+                # If this worker had an active task, it needs to be re-queued
                 if worker.current_task_id:
+                    task_found = False
                     for job in self.jobs.values():
                         for task in job.tasks:
                             if task.id == worker.current_task_id:
                                 print(f"⚠️  Worker {worker.worker_name} timed out, re-queueing task {task.id}")
                                 task.reset()
+                                task_found = True
+                                break
+                        if task_found:
+                            break
 
                 del self.workers[worker_id]
                 print(f"⚠️  Worker {worker.worker_name} removed (timeout)")
 
+            # Update dashboard with the new worker list
             await self._broadcast_update("workers")
 
     async def _broadcast_updates_loop(self) -> None:
@@ -184,27 +208,44 @@ class CoordinatorServer:
             await self._broadcast_update("all")
 
     async def _on_worker_discovered(self, node: NodeInfo) -> None:
-        """Handle worker discovery."""
+        """
+        Called when a new worker is discovered via mDNS.
+        
+        Note: This doesn't mean the worker is authenticated yet. The worker
+        must make an authenticated API request before it can receive tasks.
+        """
         print(f"✅ Worker discovered: {node.hostname} ({node.address}:{node.port})")
         await self._broadcast_update("workers")
 
     async def _on_worker_removed(self, node: NodeInfo) -> None:
-        """Handle worker removal."""
-        # Find and remove worker
+        """
+        Called when mDNS detects a worker is no longer advertising itself.
+        
+        This happens when a worker shuts down gracefully or disconnects from
+        the network. Any task the worker was working on gets re-queued.
+        """
+        # Find all workers matching this hostname (in case of duplicates)
         to_remove = []
         for worker_id, worker_info in self.workers.items():
             if worker_info.worker_name == node.hostname:
                 to_remove.append(worker_id)
 
+        # Clean up each disconnected worker
         for worker_id in to_remove:
             worker = self.workers[worker_id]
+            
+            # Re-queue any task this worker was working on
             if worker.current_task_id:
-                # Re-queue the task
+                task_found = False
                 for job in self.jobs.values():
                     for task in job.tasks:
                         if task.id == worker.current_task_id:
                             print(f"⚠️  Worker {worker.worker_name} disconnected, re-queueing task {task.id}")
                             task.reset()
+                            task_found = True
+                            break
+                    if task_found:
+                        break
 
             del self.workers[worker_id]
             print(f"⚠️  Worker {worker.worker_name} removed (disconnected)")
@@ -220,12 +261,21 @@ class CoordinatorServer:
         cpu_cores: int,
         gpu_name: str,
     ) -> dict:
-        """API: Request a task to render."""
+        """
+        Worker requests a new task to render.
+        
+        This endpoint requires worker authentication. The worker provides its
+        specs which we use for scheduling decisions in the future (currently
+        just for display).
+        
+        Returns 204 (No Content) if no tasks are available.
+        """
         current_time = time.time()
 
-        # Update or create worker info
+        # Register or update this worker's information
+        # The worker_id should be unique per worker instance
         if worker_id not in self.workers:
-            print(f"📝 New worker: {worker_name}")
+            print(f"📝 New worker registered: {worker_name} (ID: {worker_id})")
         self.workers[worker_id] = WorkerInfo(
             worker_id=worker_id,
             worker_name=worker_name,
@@ -235,18 +285,20 @@ class CoordinatorServer:
             current_task_id=None,
         )
 
-        # Find next pending task
+        # Look for the next pending task across all running jobs
         for job in self.jobs.values():
+            # Only assign tasks from jobs that are currently running
             if job.status not in ["running"]:
                 continue
 
             task = job.get_next_task()
             if task:
-                # Assign task to worker
+                # Found a task! Assign it to this worker
                 task.assign_to(worker_id)
                 task.start_rendering()
                 self.workers[worker_id].current_task_id = task.id
 
+                # Return task details so the worker knows what to render
                 return {
                     "id": task.id,
                     "job_id": job.id,
@@ -254,7 +306,7 @@ class CoordinatorServer:
                     "blend_file_hash": self._get_blend_file_hash(job),
                 }
 
-        # No tasks available
+        # No tasks available - worker should try again later
         raise HTTPException(status_code=204)
 
     async def _api_complete_task(
@@ -699,6 +751,10 @@ class CoordinatorServer:
         print()
         print(f"🌐 Server running on http://0.0.0.0:{self.port}")
         print(f"📡 Advertising via mDNS")
+        print(f"🔒 Authentication enabled - workers require API key")
         print()
+
+        # Print authentication setup instructions
+        self.auth_manager.print_setup_instructions()
 
         uvicorn.run(self.app, host="0.0.0.0", port=self.port)

@@ -8,12 +8,12 @@ import zipfile
 from pathlib import Path
 from typing import Optional, Set
 
-
 import httpx
 from websockets import connect as websocket_connect
 
 from werender.core.blender import BlenderRenderer, RenderResult
 from werender.network.discovery import DiscoveryService, NodeInfo
+from werender.network.auth import get_worker_api_key
 
 
 class WorkerNode:
@@ -85,6 +85,9 @@ class WorkerNode:
         # Async client for HTTP requests
         self.http_client: Optional[httpx.AsyncClient] = None
 
+        # API key for authentication
+        self.api_key = None
+
     def start(self) -> None:
         """Start the worker node."""
         print(f"🎬 WeRender - Worker Node")
@@ -96,6 +99,22 @@ class WorkerNode:
         if self.specs.gpu_name:
             print(f"🎮 GPU: {self.specs.gpu_name}")
         print(f"🎨 Blender: {self.blender_version or 'Not found'}")
+        print()
+
+        # Load API key
+        try:
+            self.api_key = get_worker_api_key(self.config_dir)
+            print("✅ API key loaded successfully")
+        except ValueError as e:
+            print(f"❌ Error: {e}")
+            print("\nTo fix this:")
+            print("1. Ensure the coordinator has been started at least once")
+            print("2. Or set the WERENDER_API_KEY environment variable")
+            print("3. Or copy api_keys.json from the coordinator's config directory")
+            print(f"   Expected location: {self.config_dir / 'api_keys.json'}")
+            print()
+            return
+
         print()
         print("🔍 Scanning for coordinator...")
 
@@ -160,7 +179,8 @@ class WorkerNode:
         base_url = f"http://{self.coordinator.address}:{self.coordinator.port}"
 
         try:
-            # Request a task
+            # Request a task with API key
+            headers = {"X-API-Key": self.api_key}
             async with self.http_client.stream(
                 "GET",
                 f"{base_url}/api/tasks/request",
@@ -170,6 +190,7 @@ class WorkerNode:
                     "cpu_cores": self.specs.cpu_cores,
                     "gpu_name": self.specs.gpu_name or "None",
                 },
+                headers=headers,
             ) as response:
                 if response.status_code == 204:
                     # No tasks available
@@ -252,11 +273,13 @@ class WorkerNode:
         if local_path.exists():
             return local_path
 
-        # Download file
+        # Download file with API key
         try:
+            headers = {"X-API-Key": self.api_key}
             async with self.http_client.stream(
                 "GET",
                 f"{base_url}/api/jobs/{job_id}/blend",
+                headers=headers,
             ) as response:
                 if response.status_code != 200:
                     print(f"❌ Failed to download blend file: {response.status_code}")
@@ -297,6 +320,7 @@ class WorkerNode:
             return
 
         try:
+            headers = {"X-API-Key": self.api_key}
             with open(output_file, "rb") as f:
                 files = {"output": (output_file.name, f, "image/png")}
                 data = {
@@ -307,6 +331,7 @@ class WorkerNode:
                     f"{base_url}/api/tasks/{task_data['id']}/complete",
                     data=data,
                     files=files,
+                    headers=headers,
                 )
 
             if response.status_code == 200:
@@ -331,9 +356,11 @@ class WorkerNode:
         base_url = f"http://{self.coordinator.address}:{self.coordinator.port}"
 
         try:
+            headers = {"X-API-Key": self.api_key}
             await self.http_client.post(
                 f"{base_url}/api/tasks/{task_data['id']}/fail",
                 json={"error": error},
+                headers=headers,
             )
         except Exception as e:
             print(f"❌ Failed to report task failure: {e}")
@@ -347,7 +374,7 @@ class WorkerNode:
         base_url = f"http://{self.coordinator.address}:{self.coordinator.port}"
 
         try:
-            # 1. Get Manifest
+            # 1. Get Manifest (no auth needed for sync endpoints)
             response = await self.http_client.get(f"{base_url}/api/sync/manifest")
             if response.status_code != 200:
                 print(f"⚠️  Failed to get sync manifest: {response.status_code}")
@@ -425,6 +452,7 @@ class WorkerNode:
     async def _download_and_install_addon(self, base_url: str, addon_info: dict, target_path: Path) -> None:
         """Download and install a specific add-on."""
         try:
+            # Note: Sync endpoints don't require authentication for now
             async with self.http_client.stream(
                 "GET", 
                 f"{base_url}/api/sync/addons/{addon_info['name']}/download"
