@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
 - Initial project structure
 - Coordinator and Worker CLI commands
 - mDNS-based zero-config discovery
@@ -19,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - API key-based authentication system
 
 ### Security
+
 - Added authentication for worker API endpoints
 - API key generation and management
 - Secure key storage with restricted permissions
@@ -26,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0] - 2026-01-15
 
 ### Added
+
 - Initial MVP release
 - Core coordinator/worker architecture
 - Job queue management

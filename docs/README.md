@@ -18,6 +18,7 @@ Welcome to the WeRender documentation. This guide will help you get started with
 - **[Security Guide](security/SECURITY_GUIDE.md)** - Authentication and best practices
 - **[Security Plan](security/SECURITY_PLAN.md)** - Comprehensive security implementation
 - **[Security Roadmap](security/SECURITY_IMPLEMENTATION_ROADMAP.md)** - Implementation timeline
+- **[Security Fix Summary](security/SECURITY_FIX_SUMMARY.md)** - Summary of security fixes
 
 ## Testing
 
