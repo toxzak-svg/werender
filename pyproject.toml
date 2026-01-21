@@ -4,20 +4,26 @@ build-backend = "hatchling.build"
 
 [project]
 name = "werender"
-version = "0.1.0"
+version = "0.2.0b0"
 description = "Zero-Config Peer-to-Peer Distributed Render Manager for Blender"
 readme = "README.md"
 requires-python = ">=3.10"
-license = "MIT"
-keywords = ["blender", "render", "distributed", "render-farm"]
+license = { text = "MIT" }
+keywords = ["blender", "render", "distributed", "render-farm", "network-rendering"]
 authors = [
-    { name = "WeRender Team" }
+    { name = "WeRender Team", email = "team@werender.dev" }
 ]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: End Users/Desktop",
+    "Intended Audience :: Developers",
+    "Topic :: Multimedia :: Graphics :: 3D Rendering",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
 ]
 
 dependencies = [
@@ -29,7 +35,15 @@ dependencies = [
     "pydantic>=2.5.0",
     "python-multipart>=0.0.6",
     "websockets>=12.0",
+    "aiofiles>=23.0.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/toxzak-svg/werender"
+Documentation = "https://github.com/toxzak-svg/werender#readme"
+Repository = "https://github.com/toxzak-svg/werender"
+Issues = "https://github.com/toxzak-svg/werender/issues"
+Changelog = "https://github.com/toxzak-svg/werender/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = [
