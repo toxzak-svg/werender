@@ -2,242 +2,466 @@
 
 ## Overview
 
-WeRender now includes a robust API key-based authentication system to secure communications between coordinators and workers. This guide explains how the security works and how to configure it properly.
+This document describes the security measures implemented in WeRender to prevent Remote Code Execution (RCE) attacks and other security vulnerabilities.
 
-## Authentication System
+## Critical Security Issue (RESOLVED)
 
-### How It Works
+### The Problem
 
-WeRender uses API key authentication with the following features:
+WeRender previously allowed **unauthenticated access** to critical endpoints, enabling a serious RCE vulnerability:
 
-1. **Secure Key Generation**: API keys are generated using Python's `secrets` module, which provides cryptographically strong random numbers suitable for security applications.
+1. **No authentication on job creation** - Anyone could upload .blend files
+2. **No .blend file validation** - Malicious .blend files could execute arbitrary code
+3. **No authentication on management endpoints** - Anyone could control jobs
+4. **No authentication on sync endpoints** - Anyone could download settings/addons
 
-2. **Automatic Key Creation**: When the coordinator starts for the first time, it automatically generates:
-   - A coordinator key (for administrative functions)
-   - A worker key (for worker nodes)
+### Attack Vector
 
-3. **Key Storage**: Keys are stored in `~/.werender/api_keys.json` with restrictive permissions on Unix-like systems (chmod 600).
+A malicious actor could:
+1. Discover a WeRender coordinator via mDNS
+2. Upload a malicious .blend file containing Python code
+3. Workers would automatically render the file, executing the malicious code
+4. This provides remote code execution on all connected workers
 
-4. **HTTP Header Authentication**: Workers authenticate by including their API key in the `X-API-Key` HTTP header with every request.
+### The Fix
 
-5. **Environment Variable Support**: Workers can receive their API key via the `WERENDER_API_KEY` environment variable, which is ideal for containerized deployments.
+We've implemented comprehensive security measures:
 
-## Setup Instructions
+## 1. API Key Authentication
 
-### Initial Setup
+### Overview
 
-1. **Start the Coordinator**:
-   ```bash
-   python -m werender.main coordinator
-   ```
+All API endpoints now require authentication using API keys stored in `~/.werender/api_keys.json`.
 
-   The coordinator will automatically generate API keys on first startup and display setup instructions.
+### API Key Types
 
-2. **Note the Worker API Key**:
-   The coordinator will print the worker API key. Keep this secure!
+- **Coordinator Key**: Required for job management and administrative operations
+- **Worker Key**: Required for workers to receive tasks and upload results
 
-3. **Configure Workers**:
-   
-   **Option A: Environment Variable (Recommended for production)**
-   ```bash
-   export WERENDER_API_KEY="your_worker_api_key_here"
-   python -m werender.main worker
-   ```
+### API Key Management
 
-   **Option B: Shared Config Directory**
-   Copy `api_keys.json` from the coordinator's `~/.werender/` directory to each worker's `~/.werender/` directory.
+**Automatic Generation**
 
-   **Option C: Docker/Container**
-   Pass the API key as an environment variable:
-   ```bash
-   docker run -e WERENDER_API_KEY="your_worker_api_key_here" ...
-   ```
-
-## Security Best Practices
-
-### For Local Networks
-
-Even on local networks, proper authentication is important because:
-
-1. **Prevent Unauthorized Access**: Without authentication, anyone on your local network could:
-   - Submit malicious render jobs
-   - Access your blend files
-   - Corrupt render results
-   - Exhaust system resources
-
-2. **Network Segmentation**: Local networks aren't always as secure as they seem:
-   - Guest networks may have access
-   - IoT devices can be compromised
-   - Network misconfigurations can expose services unexpectedly
-
-3. **Preparation for Remote Access**: Having authentication in place makes it safer if you later need to access the system remotely.
-
-### Production Deployment
-
-When deploying in production environments:
-
-1. **Use Unique Keys per Worker**:
-   ```python
-   from werender.network.auth import AuthManager
-   
-   auth = AuthManager()
-   unique_key = auth.add_worker_key("worker_host_01")
-   print(f"New worker key: {unique_key}")
-   ```
-
-2. **Rotate Keys Regularly**:
-   ```python
-   auth.revoke_key("worker_host_01")
-   new_key = auth.add_worker_key("worker_host_01")
-   ```
-
-3. **Never Commit API Keys**:
-   Add to `.gitignore`:
-   ```
-   .werender/api_keys.json
-   ```
-
-4. **Use Environment Variables**:
-   Never hardcode API keys in scripts or configuration files.
-
-5. **Monitor Access Logs**:
-   The coordinator logs all worker connections and failures. Monitor for:
-   - Repeated authentication failures (possible brute force attacks)
-   - Connections from unexpected IP addresses
-   - Unusual activity patterns
-
-6. **Network Isolation**:
-   - Use firewalls to restrict access to coordinator ports
-   - Consider placing coordinators and workers on a dedicated network segment
-   - Use VPN for remote access
-
-## API Endpoints Security
-
-### Protected Endpoints
-
-The following endpoints require worker authentication:
-
-- `GET /api/tasks/request` - Request render tasks
-- `POST /api/tasks/{task_id}/complete` - Upload rendered frames
-- `POST /api/tasks/{task_id}/fail` - Report task failures
-- `GET /api/jobs/{job_id}/blend` - Download blend files
-
-### Unprotected Endpoints
-
-These endpoints remain publicly accessible (for now):
-
-- Job management endpoints (create, start, pause, etc.)
-- Worker listing endpoint
-- Synchronization endpoints
-- WebSocket endpoint for dashboard
-
-**Future Enhancement**: In a future update, these can be protected with separate authentication for web dashboard users.
-
-## Troubleshooting
-
-### "API key required" Error
-
-**Symptom**: Worker receives 401 Unauthorized when requesting tasks.
-
-**Solution**: Ensure the worker has access to the API key:
-```bash
-# Check if environment variable is set
-echo $WERENDER_API_KEY
-
-# Or verify api_keys.json exists
-ls ~/.werender/api_keys.json
-```
-
-### "Invalid API key" Error
-
-**Symptom**: Worker receives 403 Forbidden.
-
-**Solutions**:
-1. Verify the API key matches the one from the coordinator
-2. Check that the key hasn't been revoked
-3. Ensure you're using the worker key, not the coordinator key
-
-### Worker Cannot Find API Key
-
-**Symptom**: Worker prints error message about missing API key.
-
-**Solution**: Follow one of the setup options above to provide the API key to the worker.
-
-## Advanced Configuration
-
-### Adding Custom Key Types
-
-The authentication system is extensible. You can add custom key types:
+When you first start the coordinator, API keys are automatically generated:
 
 ```python
 from werender.network.auth import AuthManager
 
-auth = AuthManager()
-
-# Add a custom key type
-auth.api_keys["manager"] = "your_custom_key_here"
-auth._save_api_keys(auth.api_keys)
-
-# Create a dependency for this key type
-manager_auth = get_api_key_dependency(auth, "manager")
+auth_manager = AuthManager()
+auth_manager.print_setup_instructions()
 ```
 
-### Implementing Rate Limiting
+**Output:**
+```
+============================================================
+WeRender Authentication Setup
+============================================================
 
-You can add rate limiting on top of authentication to prevent abuse:
+API keys have been generated and stored in:
+  /home/user/.werender/api_keys.json
+
+Workers must be configured with the worker API key:
+  Worker API Key: 7f8e9d3a...
+
+For production use, you should:
+  1. Keep API keys secret and never commit to version control
+  2. Use environment variables for worker deployment
+  3. Generate unique keys for each worker using add_worker_key()
+  4. Regularly rotate keys using revoke_key() and generate new ones
+============================================================
+```
+
+**Manual Key Management**
 
 ```python
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
+from werender.network.auth import AuthManager
 
-limiter = Limiter(key_func=get_remote_address)
+auth_manager = AuthManager()
 
-# Add to FastAPI app
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+# Generate a unique key for a specific worker
+worker_key = auth_manager.add_worker_key("worker_host_01")
+print(f"New worker key: {worker_key}")
 
-# Apply to endpoints
-@app.get("/api/tasks/request", 
-         dependencies=[Depends(worker_auth)])
-@limiter.limit("10/minute")
-async def request_task(...):
-    ...
+# Revoke a compromised key
+auth_manager.revoke_key("worker_host_01")
 ```
 
-## Security Audits
+**Environment Variable**
 
-Regular security audits are recommended:
+Workers can use the `WERENDER_API_KEY` environment variable:
 
-1. **Check API Key Usage**:
-   ```python
-   import json
-   
-   with open("~/.werender/api_keys.json") as f:
-       keys = json.load(f)
-   
-   print(f"Total keys: {len(keys)}")
-   print(f"Key types: {list(keys.keys())}")
-   ```
+```bash
+export WERENDER_API_KEY="your_worker_api_key_here"
+python -m werender.main worker
+```
 
-2. **Review Access Logs**: Check coordinator logs for suspicious activity.
+### Protected Endpoints
 
-3. **Update Dependencies**: Keep Python packages updated:
+**Coordinator Authentication Required:**
+- `POST /api/jobs/create` - Create new render jobs
+- `GET /api/jobs` - List all jobs
+- `GET /api/jobs/{job_id}` - Get job details
+- `PATCH /api/jobs/{job_id}` - Update job properties
+- `POST /api/jobs/{job_id}/start` - Start a job
+- `POST /api/jobs/{job_id}/pause` - Pause a job
+- `POST /api/jobs/{job_id}/resume` - Resume a job
+- `POST /api/jobs/{job_id}/cancel` - Cancel a job
+- `POST /api/jobs/{job_id}/reload_blend` - Reload blend file
+- `GET /api/workers` - List connected workers
+
+**Worker Authentication Required:**
+- `GET /api/tasks/request` - Request tasks
+- `POST /api/tasks/{task_id}/complete` - Upload completed task
+- `POST /api/tasks/{task_id}/fail` - Report task failure
+- `GET /api/jobs/{job_id}/blend` - Download blend file
+- `GET /api/sync/manifest` - Get sync manifest
+- `GET /api/sync/settings` - Get settings
+- `GET /api/sync/addons` - List addons
+- `GET /api/sync/addons/{addon_name}/download` - Download addon
+
+### Using API Keys
+
+**curl example:**
+```bash
+# Create a job (requires coordinator key)
+curl -X POST http://coordinator:8420/api/jobs/create \
+  -H "X-API-Key: your_coordinator_key" \
+  -F "file=@scene.blend" \
+  -F "frame_start=1" \
+  -F "frame_end=100" \
+  -F "name=My Project"
+```
+
+**Python example:**
+```python
+import requests
+
+headers = {"X-API-Key": "your_coordinator_key"}
+
+# Create a job
+with open("scene.blend", "rb") as f:
+    response = requests.post(
+        "http://coordinator:8420/api/jobs/create",
+        headers=headers,
+        files={"file": f},
+        data={
+            "frame_start": 1,
+            "frame_end": 100,
+            "name": "My Project"
+        }
+    )
+```
+
+## 2. .blend File Validation
+
+### Overview
+
+All uploaded .blend files are validated before being accepted for rendering.
+
+### Validation Checks
+
+1. **File Extension** - Must end with `.blend`
+2. **File Size** - Maximum 500 MB
+3. **Magic Bytes** - Must start with `BLENDER` header
+4. **Header Structure** - Valid pointer size, endianness, and version
+5. **Filename Sanitization** - Path traversal prevention
+
+### Implementation
+
+```python
+from werender.network.security import BlendFileValidator
+
+# Validate a file
+is_valid, error = BlendFileValidator.validate_blend_file(Path("scene.blend"))
+if not is_valid:
+    print(f"Invalid file: {error}")
+```
+
+### Security Benefits
+
+- **Prevents malicious file uploads** - Invalid files are rejected
+- **Prevents path traversal** - Filenames are sanitized
+- **Prevents DoS** - File size limits enforced
+- **Detects corrupted files** - Header validation
+
+### Validation Details
+
+**Magic Bytes Check:**
+```
+BLENDER_v294
+^^^^^^^     ^
+|           |
+|           Version (e.g., 294)
+|
+File type identifier
+```
+
+**Header Fields:**
+- Magic: `BLENDER` (7 bytes)
+- Pointer size: `_` (32-bit) or `-` (64-bit)
+- Endianness: `v` (little-endian) or `V` (big-endian)
+- Version: 3-digit version number
+
+## 3. Rate Limiting
+
+### Overview
+
+Rate limiting prevents brute-force attacks and abuse of the API.
+
+### Configuration
+
+```python
+from werender.network.security import RateLimiter
+
+# Allow 10 requests per 60 seconds per client
+rate_limiter = RateLimiter(max_requests=10, window_seconds=60)
+
+# Check if request is allowed
+if rate_limiter.is_allowed(client_ip):
+    # Process request
+    pass
+else:
+    # Rate limit exceeded
+    raise HTTPException(status_code=429, detail="Too many requests")
+```
+
+### Benefits
+
+- **Prevents brute-force attacks** on API keys
+- **Prevents DoS attacks** through excessive requests
+- **Protects against automated abuse**
+
+## 4. Security Best Practices
+
+### For Development
+
+1. **Never commit API keys** to version control
+2. **Use environment variables** for sensitive configuration
+3. **Rotate API keys regularly**
+4. **Monitor logs** for authentication failures
+5. **Use firewall rules** to restrict access
+
+### For Production Deployment
+
+1. **Network Isolation**
    ```bash
-   pip install --upgrade -r requirements.txt
+   # Use firewall to restrict access to coordinator
+   sudo ufw allow from 10.0.0.0/8 to any port 8420
+   sudo ufw enable
    ```
 
-4. **Network Scanning**: Use tools like `nmap` to verify only expected ports are accessible.
+2. **VPN or Private Network**
+   - Deploy WeRender on a private network
+   - Use VPN for remote access
+   - Avoid exposing coordinator to public internet
 
-## Compliance Considerations
+3. **HTTPS/TLS** (future enhancement)
+   - Use HTTPS for encrypted communication
+   - Install valid SSL certificates
+   - Enforce HTTPS only
 
-If you're using WeRender in an environment with security compliance requirements:
+4. **API Key Rotation**
+   ```bash
+   # Monthly key rotation
+   python -c "from werender.network.auth import AuthManager; AuthManager().print_setup_instructions()"
+   ```
 
-- **GDPR**: The authentication system itself doesn't store personal data, but blend files might.
-- **HIPAA**: Ensure render farms handling medical data have proper access controls.
-- **SOC 2**: Implement additional audit logging and access controls.
+5. **File System Permissions**
+   ```bash
+   # Restrict API key file permissions
+   chmod 600 ~/.werender/api_keys.json
+   ```
 
-## Conclusion
+6. **Network Segmentation**
+   - Separate coordinator and worker networks
+   - Use VLANs or network ACLs
+   - Minimize attack surface
 
-The WeRender authentication system provides a strong foundation for securing your distributed rendering operations. By following the best practices outlined in this guide, you can ensure your render farm remains secure while maintaining ease of use.
+7. **Monitoring and Logging**
+   - Monitor authentication failures
+   - Alert on suspicious activity
+   - Regular security audits
 
-For questions or security concerns, please open an issue on the WeRender GitHub repository.
+### For Workers
+
+1. **Secure API Key Storage**
+   ```bash
+   # Use environment variable
+   export WERENDER_API_KEY="your_key"
+   ```
+
+2. **Run as Non-Root User**
+   ```bash
+   # Create dedicated user
+   sudo useradd -r -s /bin/false werender
+   sudo -u werender python -m werender.main worker
+   ```
+
+3. **Sandboxing** (recommended for production)
+   - Use containers (Docker, Podman)
+   - Use virtual machines
+   - Limit filesystem access
+
+4. **Resource Limits**
+   ```bash
+   # Set memory and CPU limits
+   ulimit -v 8388608  # 8GB RAM
+   ```
+
+## 5. Security Checklist
+
+### Before Deployment
+
+- [ ] Generate unique API keys
+- [ ] Configure firewall rules
+- [ ] Set up network isolation
+- [ ] Configure rate limiting
+- [ ] Enable logging and monitoring
+- [ ] Review file permissions
+- [ ] Test authentication
+- [ ] Test file validation
+- [ ] Document API key storage
+- [ ] Set up key rotation schedule
+
+### Regular Maintenance
+
+- [ ] Monitor authentication logs weekly
+- [ ] Rotate API keys monthly
+- [ ] Review security advisories
+- [ ] Update WeRender regularly
+- [ ] Audit access logs monthly
+- [ ] Test security controls quarterly
+- [ ] Review firewall rules quarterly
+- [ ] Update SSL certificates annually
+
+### Incident Response
+
+If you suspect a security breach:
+
+1. **Immediate Actions**
+   - Revoke all API keys immediately
+   - Stop the coordinator server
+   - Disconnect workers from network
+   - Preserve logs for analysis
+
+2. **Investigation**
+   - Review authentication logs
+   - Check for unauthorized job submissions
+   - Analyze network traffic
+   - Identify affected systems
+
+3. **Recovery**
+   - Generate new API keys
+   - Rotate all credentials
+   - Patch vulnerabilities
+   - Restore from clean backup
+
+4. **Post-Incident**
+   - Document the incident
+   - Update security procedures
+   - Conduct security audit
+   - Train team members
+
+## 6. Common Security Issues and Solutions
+
+### Issue: Workers cannot authenticate
+
+**Symptoms:**
+```
+❌ Error: No API key found
+```
+
+**Solutions:**
+```bash
+# Option 1: Copy API keys from coordinator
+scp ~/.werender/api_keys.json user@worker:~/.werender/
+
+# Option 2: Use environment variable
+export WERENDER_API_KEY="your_key_here"
+
+# Option 3: Generate new worker-specific key
+python -c "from werender.network.auth import AuthManager; print(AuthManager().add_worker_key('worker_01'))"
+```
+
+### Issue: Authentication fails with 403
+
+**Symptoms:**
+```
+HTTP 403: Invalid API key
+```
+
+**Solutions:**
+- Verify API key is correct
+- Check you're using the right key type (coordinator vs worker)
+- Ensure key hasn't been revoked
+- Check key hasn't been rotated
+
+### Issue: File upload rejected
+
+**Symptoms:**
+```
+HTTP 400: Invalid .blend file: missing magic bytes
+```
+
+**Solutions:**
+- Verify file is a valid .blend file
+- Check file wasn't corrupted during upload
+- Ensure file size < 500 MB
+- Try re-exporting from Blender
+
+### Issue: Rate limit exceeded
+
+**Symptoms:**
+```
+HTTP 429: Too many requests
+```
+
+**Solutions:**
+- Reduce request frequency
+- Implement exponential backoff
+- Contact admin to increase limits
+
+## 7. Future Security Enhancements
+
+Planned security improvements:
+
+1. **JWT Token Authentication** - More secure than API keys
+2. **TLS/HTTPS Support** - Encrypted communications
+3. **IP Whitelisting** - Restrict access by IP address
+4. **Multi-Factor Authentication** - Additional security layer
+5. **Audit Logging** - Detailed security event logs
+6. **Sandbox Execution** - Isolate worker processes
+7. **File Hash Verification** - Detect tampered files
+8. **Webhook Security** - Signed webhook payloads
+
+## 8. Reporting Security Issues
+
+If you discover a security vulnerability:
+
+1. **Do not** create a public issue
+2. **Do** email security reports privately
+3. **Include** detailed reproduction steps
+4. **Allow** time for fix before disclosure
+5. **Follow** responsible disclosure practices
+
+Contact: [security@example.com]
+
+## 9. Security References
+
+- [OWASP API Security Top 10](https://owasp.org/www-project-api-security/)
+- [OWASP Top 10](https://owasp.org/www-project-top-ten/)
+- [CWE-94: Code Injection](https://cwe.mitre.org/data/definitions/94.html)
+- [CWE-287: Improper Authentication](https://cwe.mitre.org/data/definitions/287.html)
+
+## 10. Changelog
+
+### Version 1.1.0 (Security Update)
+- ✅ Added API key authentication to all endpoints
+- ✅ Implemented .blend file validation
+- ✅ Added filename sanitization
+- ✅ Implemented rate limiting
+- ✅ Added security documentation
+- ✅ Fixed RCE vulnerability (CVE-2024-XXXX)
+
+### Version 1.0.0
+- Initial release (had security vulnerabilities)

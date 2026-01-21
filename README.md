@@ -50,9 +50,13 @@ For more detailed instructions, see the [User Guide](docs/user_guide.md).
 
 ## Documentation
 
-- **[User Guide](docs/user_guide.md)**: Installation, usage, and dashboard features.
-- **[Architecture](docs/architecture.md)**: innovative hub-and-spoke design and data flow.
-- **[Development](docs/development.md)**: Setup for contributors.
+- **[User Guide](docs/user_guide.md)** - Installation, usage, and dashboard features
+- **[Architecture](docs/architecture.md)** - Hub-and-spoke design and data flow
+- **[Development](docs/development.md)** - Setup for contributors
+- **[API Reference](docs/api/README.md)** - HTTP and WebSocket API documentation
+- **[Security Guide](docs/security/SECURITY_GUIDE.md)** - Authentication and best practices
+- **[Contributing](CONTRIBUTING.md)** - How to contribute to the project
+- **[Changelog](CHANGELOG.md)** - Version history
 
 ## License
 

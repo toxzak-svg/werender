@@ -19,6 +19,7 @@ from werender.core.job import RenderJob, TaskStatus
 from werender.network.discovery import DiscoveryService, NodeInfo
 from werender.network.sync import SyncManager
 from werender.network.auth import AuthManager, get_api_key_dependency
+from werender.network.security import BlendFileValidator, RateLimiter
 
 
 
@@ -96,6 +97,9 @@ class CoordinatorServer:
 
         # Authentication Manager
         self.auth_manager = AuthManager(self.config_dir)
+        
+        # Security components
+        self.rate_limiter = RateLimiter(max_requests=10, window_seconds=60)
 
         # Setup FastAPI app
         self.app = FastAPI(title="WeRender Coordinator")
@@ -108,6 +112,7 @@ class CoordinatorServer:
 
         # Create authentication dependencies
         worker_auth = get_api_key_dependency(self.auth_manager, "worker")
+        coordinator_auth = get_api_key_dependency(self.auth_manager, "coordinator")
 
         # Worker endpoints (require worker authentication)
         self.app.get("/api/tasks/request", dependencies=[Depends(worker_auth)])(self._api_request_task)
@@ -115,25 +120,25 @@ class CoordinatorServer:
         self.app.post("/api/tasks/{task_id}/fail", dependencies=[Depends(worker_auth)])(self._api_fail_task)
         self.app.get("/api/jobs/{job_id}/blend", dependencies=[Depends(worker_auth)])(self._api_get_blend_file)
 
-        # Job management endpoints
-        self.app.post("/api/jobs/create")(self._api_create_job)
-        self.app.get("/api/jobs")(self._api_list_jobs)
-        self.app.get("/api/jobs/{job_id}")(self._api_get_job)
-        self.app.patch("/api/jobs/{job_id}")(self._api_update_job)
-        self.app.post("/api/jobs/{job_id}/start")(self._api_start_job)
-        self.app.post("/api/jobs/{job_id}/pause")(self._api_pause_job)
-        self.app.post("/api/jobs/{job_id}/resume")(self._api_resume_job)
-        self.app.post("/api/jobs/{job_id}/cancel")(self._api_cancel_job)
-        self.app.post("/api/jobs/{job_id}/reload_blend")(self._api_reload_blend)
+        # Job management endpoints (require coordinator authentication - CRITICAL SECURITY FIX)
+        self.app.post("/api/jobs/create", dependencies=[Depends(coordinator_auth)])(self._api_create_job)
+        self.app.get("/api/jobs", dependencies=[Depends(coordinator_auth)])(self._api_list_jobs)
+        self.app.get("/api/jobs/{job_id}", dependencies=[Depends(coordinator_auth)])(self._api_get_job)
+        self.app.patch("/api/jobs/{job_id}", dependencies=[Depends(coordinator_auth)])(self._api_update_job)
+        self.app.post("/api/jobs/{job_id}/start", dependencies=[Depends(coordinator_auth)])(self._api_start_job)
+        self.app.post("/api/jobs/{job_id}/pause", dependencies=[Depends(coordinator_auth)])(self._api_pause_job)
+        self.app.post("/api/jobs/{job_id}/resume", dependencies=[Depends(coordinator_auth)])(self._api_resume_job)
+        self.app.post("/api/jobs/{job_id}/cancel", dependencies=[Depends(coordinator_auth)])(self._api_cancel_job)
+        self.app.post("/api/jobs/{job_id}/reload_blend", dependencies=[Depends(coordinator_auth)])(self._api_reload_blend)
 
-        # Worker management endpoints
-        self.app.get("/api/workers")(self._api_list_workers)
+        # Worker management endpoints (require coordinator authentication)
+        self.app.get("/api/workers", dependencies=[Depends(coordinator_auth)])(self._api_list_workers)
 
-        # Sync endpoints
-        self.app.get("/api/sync/manifest")(self._api_get_sync_manifest)
-        self.app.get("/api/sync/settings")(self._api_get_settings)
-        self.app.get("/api/sync/addons")(self._api_list_addons)
-        self.app.get("/api/sync/addons/{addon_name}/download")(self._api_download_addon)
+        # Sync endpoints (require coordinator authentication - SECURITY FIX)
+        self.app.get("/api/sync/manifest", dependencies=[Depends(worker_auth)])(self._api_get_sync_manifest)
+        self.app.get("/api/sync/settings", dependencies=[Depends(worker_auth)])(self._api_get_settings)
+        self.app.get("/api/sync/addons", dependencies=[Depends(worker_auth)])(self._api_list_addons)
+        self.app.get("/api/sync/addons/{addon_name}/download", dependencies=[Depends(worker_auth)])(self._api_download_addon)
 
         # WebSocket endpoint
         self.app.websocket("/ws")(self._websocket_endpoint)
@@ -406,13 +411,25 @@ class CoordinatorServer:
         name: str = Form(""),
     ) -> dict:
         """API: Create a new render job."""
+        # Sanitize filename to prevent path traversal
+        safe_filename = BlendFileValidator.sanitize_filename(file.filename or "unnamed.blend")
+        
         # Save uploaded blend file
         temp_dir = Path(tempfile.gettempdir()) / "werender" / "jobs"
         temp_dir.mkdir(parents=True, exist_ok=True)
 
-        blend_path = temp_dir / file.filename
+        blend_path = temp_dir / safe_filename
         with open(blend_path, "wb") as f:
             shutil.copyfileobj(file.file, f)
+        
+        # Validate the .blend file for security
+        is_valid, error_msg = BlendFileValidator.validate_blend_file(blend_path)
+        if not is_valid:
+            blend_path.unlink()  # Delete the invalid file
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid .blend file: {error_msg}"
+            )
 
         # Create job
         job = RenderJob(
@@ -607,14 +624,24 @@ class CoordinatorServer:
                 detail="Cannot reload blend file while job is running. Pause the job first."
             )
 
-        # Save new blend file
+        # Save new blend file with sanitized filename
+        safe_filename = BlendFileValidator.sanitize_filename(blend.filename)
         temp_dir = Path(tempfile.gettempdir()) / "werender" / "jobs"
         temp_dir.mkdir(parents=True, exist_ok=True)
 
-        new_blend_path = temp_dir / blend.filename
+        new_blend_path = temp_dir / safe_filename
         with open(new_blend_path, "wb") as f:
             shutil.copyfileobj(blend.file, f)
-
+        
+        # Validate the .blend file for security
+        is_valid, error_msg = BlendFileValidator.validate_blend_file(new_blend_path)
+        if not is_valid:
+            new_blend_path.unlink()  # Delete the invalid file
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid .blend file: {error_msg}"
+            )
+        
         # Replace existing blend file
         job.blend_file = new_blend_path
 
