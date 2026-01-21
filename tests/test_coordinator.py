@@ -92,10 +92,13 @@ def coordinator(mock_system_specs, mock_blender_renderer, mock_discovery_service
 
 @pytest.fixture
 def sample_blend_file():
-    """Create a temporary blend file for testing."""
+    """Create a temporary blend file for testing with valid Blender header."""
     temp_dir = Path(tempfile.mkdtemp())
     blend_file = temp_dir / "test.blend"
-    blend_file.write_bytes(b"fake blend file content")
+    # Valid Blender file header: 'BLENDER' + pointer size ('_' for 64-bit) + endianness ('v' for little) + version (e.g., '401')
+    # Format: BLENDER_v401 (12 bytes minimum header) + padding
+    valid_header = b'BLENDER_v401' + b'\x00' * 100  # Add padding for file integrity
+    blend_file.write_bytes(valid_header)
     return blend_file
 
 
@@ -127,12 +130,72 @@ def sample_worker():
 
 
 @pytest.fixture
-def client(coordinator):
-    """Create a FastAPI TestClient."""
+def auth_headers(coordinator):
+    """Get authentication headers for API calls."""
+    # Use the coordinator's auth manager to get the API keys
+    coordinator_key = coordinator.auth_manager.get_key("coordinator")
+    worker_key = coordinator.auth_manager.get_key("worker")
+    return {
+        "coordinator": {"X-API-Key": coordinator_key},
+        "worker": {"X-API-Key": worker_key},
+    }
+
+
+@pytest.fixture
+def client(coordinator, auth_headers):
+    """Create a FastAPI TestClient with authentication."""
     # Store coordinator reference in app state for easy access
     coordinator.app.state.coordinator = coordinator
-    client = TestClient(coordinator.app)
-    return client
+    
+    # Create a wrapper class that auto-adds auth headers
+    class AuthenticatedTestClient:
+        def __init__(self, test_client, auth_headers):
+            self._client = test_client
+            self._auth_headers = auth_headers
+            # Store app reference for compatibility
+            self.app = test_client.app
+        
+        def _get_auth_header(self, endpoint: str) -> dict:
+            """Determine which auth header to use based on endpoint."""
+            # Worker endpoints
+            worker_endpoints = ["/api/tasks/request", "/api/tasks/", "/api/jobs/", "/api/sync/"]
+            # Check if it's a worker-only endpoint (task request, complete, fail, get blend, sync)
+            if any(endpoint.startswith(ep) for ep in ["/api/tasks/request", "/api/sync/"]):
+                return self._auth_headers["worker"]
+            if "/api/tasks/" in endpoint and ("/complete" in endpoint or "/fail" in endpoint):
+                return self._auth_headers["worker"]
+            if "/blend" in endpoint:
+                return self._auth_headers["worker"]
+            # Default to coordinator auth for all other endpoints
+            return self._auth_headers["coordinator"]
+        
+        def get(self, url, **kwargs):
+            headers = kwargs.pop("headers", {})
+            headers.update(self._get_auth_header(url))
+            return self._client.get(url, headers=headers, **kwargs)
+        
+        def post(self, url, **kwargs):
+            headers = kwargs.pop("headers", {})
+            headers.update(self._get_auth_header(url))
+            return self._client.post(url, headers=headers, **kwargs)
+        
+        def put(self, url, **kwargs):
+            headers = kwargs.pop("headers", {})
+            headers.update(self._get_auth_header(url))
+            return self._client.put(url, headers=headers, **kwargs)
+        
+        def patch(self, url, **kwargs):
+            headers = kwargs.pop("headers", {})
+            headers.update(self._get_auth_header(url))
+            return self._client.patch(url, headers=headers, **kwargs)
+        
+        def delete(self, url, **kwargs):
+            headers = kwargs.pop("headers", {})
+            headers.update(self._get_auth_header(url))
+            return self._client.delete(url, headers=headers, **kwargs)
+    
+    test_client = TestClient(coordinator.app)
+    return AuthenticatedTestClient(test_client, auth_headers)
 
 
 # ============================================================================
@@ -467,13 +530,7 @@ class TestApiRequestTask:
 
         # Get the coordinator from the app state
         from werender.network.coordinator import CoordinatorServer
-        coordinator = client.app.state.get("coordinator")
-        if coordinator is None:
-            # Find coordinator through the app routes
-            for route in client.app.routes:
-                if hasattr(route, "endpoint") and hasattr(route.endpoint, "__self__"):
-                    coordinator = route.endpoint.__self__
-                    break
+        coordinator = client.app.state.coordinator
 
         if coordinator and "worker-001" in coordinator.workers:
             worker = coordinator.workers["worker-001"]
@@ -1236,13 +1293,13 @@ class TestHealthCheckLoop:
         coordinator.workers[sample_worker.worker_id] = sample_worker
         coordinator._broadcast_update = AsyncMock()
 
-        # Run one iteration of the loop
-        task = asyncio.create_task(coordinator._health_check_loop())
-        await asyncio.sleep(0.1)  # Let it run once
-        task.cancel()
+        # Run one iteration of the loop - must wait longer than 5 second initial sleep
+        async_task = asyncio.create_task(coordinator._health_check_loop())
+        await asyncio.sleep(6)  # Wait longer than the 5 second sleep in the loop
+        async_task.cancel()
 
         try:
-            await task
+            await async_task
         except asyncio.CancelledError:
             pass
 
@@ -1252,29 +1309,30 @@ class TestHealthCheckLoop:
     @pytest.mark.asyncio
     async def test_health_check_requeues_stale_tasks(self, coordinator, sample_job, sample_worker):
         """Test that tasks from stale workers are re-queued."""
-        # Assign a task to the worker
-        task = sample_job.tasks[0]
-        task.assign_to(sample_worker.worker_id)
-        task.start_rendering()
-        sample_worker.current_task_id = task.id
+        # Assign a task to the worker (renamed to frame_task to avoid shadowing)
+        frame_task = sample_job.tasks[0]
+        frame_task.assign_to(sample_worker.worker_id)
+        frame_task.start_rendering()
+        sample_worker.current_task_id = frame_task.id
         sample_worker.last_seen = time.time() - 60
 
         coordinator.workers[sample_worker.worker_id] = sample_worker
         coordinator._broadcast_update = AsyncMock()
 
-        # Run one iteration
-        task = asyncio.create_task(coordinator._health_check_loop())
-        await asyncio.sleep(0.1)
-        task.cancel()
+        # Run one iteration - note: the health check loop sleeps for 5 seconds,
+        # but we give it enough time by checking the actual task state after cancelling
+        async_task = asyncio.create_task(coordinator._health_check_loop())
+        await asyncio.sleep(6)  # Wait longer than the 5 second sleep in the loop
+        async_task.cancel()
 
         try:
-            await task
+            await async_task
         except asyncio.CancelledError:
             pass
 
         # Task should be reset (worker is removed, so task should be reset)
-        assert task.status == TaskStatus.PENDING
-        assert task.assigned_worker is None
+        assert frame_task.status == TaskStatus.PENDING
+        assert frame_task.assigned_worker is None
 
     @pytest.mark.asyncio
     async def test_health_check_keeps_active_workers(self, coordinator, sample_worker):
@@ -1306,13 +1364,13 @@ class TestBroadcastUpdatesLoop:
         """Test that broadcast loop sends updates."""
         coordinator._broadcast_update = AsyncMock()
 
-        # Run one iteration
-        task = asyncio.create_task(coordinator._broadcast_updates_loop())
-        await asyncio.sleep(0.1)
-        task.cancel()
+        # Run one iteration - must wait longer than 2 second sleep in the loop
+        async_task = asyncio.create_task(coordinator._broadcast_updates_loop())
+        await asyncio.sleep(3)  # Wait longer than the 2 second sleep in the loop
+        async_task.cancel()
 
         try:
-            await task
+            await async_task
         except asyncio.CancelledError:
             pass
 

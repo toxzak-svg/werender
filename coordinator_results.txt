@@ -1,0 +1,247 @@
+.........F.........FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF [ 73%]
+.......FF.FFF.............                                               [100%]
+================================== FAILURES ===================================
+E   AssertionError: assert '5.0.1' == ''
+      
+      + 5.0.1
+c:\dev\projects\werender\tests\test_coordinator.py:209: AssertionError: assert '5.0.1' == ''
+E   assert 401 == 204
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:430: assert 401 == 204
+E   assert 401 == 200
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:445: assert 401 == 200
+E   assert 401 == 200
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:466: assert 401 == 200
+E   assert 401 == 200
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:499: assert 401 == 200
+E   assert 401 == 200
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:520: assert 401 == 200
+E   assert 401 == 204
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:543: assert 401 == 204
+E   assert 401 == 200
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:565: assert 401 == 200
+E   assert 401 == 404
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:576: assert 401 == 404
+E   assert 401 == 200
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:593: assert 401 == 200
+E   assert 401 == 200
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:610: assert 401 == 200
+E   assert 401 == 200
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:628: assert 401 == 200
+E   assert 401 == 404
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:639: assert 401 == 404
+E   assert 401 == 200
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:655: assert 401 == 200
+E   assert 401 == 200
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:667: assert 401 == 200
+E   assert 401 == 200
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:691: assert 401 == 200
+E   assert 401 == 200
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:707: assert 401 == 200
+E   assert 401 == 200
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:722: assert 401 == 200
+E   assert 401 == 200
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:728: assert 401 == 200
+E   assert 401 == 200
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:755: assert 401 == 200
+E   assert 401 == 200
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:766: assert 401 == 200
+E   assert 401 == 404
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:778: assert 401 == 404
+E   KeyError: 'tasks'
+c:\dev\projects\werender\tests\test_coordinator.py:785: KeyError: 'tasks'
+E   assert 401 == 200
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:797: assert 401 == 200
+E   assert 401 == 404
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:804: assert 401 == 404
+E   assert 401 == 200
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:810: assert 401 == 200
+E   assert 401 == 200
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:820: assert 401 == 200
+E   assert 401 == 404
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:827: assert 401 == 404
+E   assert 401 == 200
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:838: assert 401 == 200
+E   assert 401 == 404
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:845: assert 401 == 404
+E   assert 401 == 200
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:855: assert 401 == 200
+E   assert 401 == 404
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:862: assert 401 == 404
+E   assert 401 == 200
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:873: assert 401 == 200
+E   assert 401 == 200
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:891: assert 401 == 200
+E   assert 401 == 404
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:902: assert 401 == 404
+E   assert 401 == 400
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:911: assert 401 == 400
+E   assert 401 == 400
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:919: assert 401 == 400
+E   assert 401 == 200
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:928: assert 401 == 200
+E   assert 401 == 200
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:943: assert 401 == 200
+E   assert 401 == 200
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:953: assert 401 == 200
+E   assert 401 == 404
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:959: assert 401 == 404
+E   assert 401 == 200
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:969: assert 401 == 200
+E   assert 401 == 200
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:984: assert 401 == 200
+E   assert 401 == 404
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:995: assert 401 == 404
+E   assert 401 == 400
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:1003: assert 401 == 400
+E   assert 401 == 400
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:1013: assert 401 == 400
+E   assert 401 == 200
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:1027: assert 401 == 200
+E   assert 401 == 200
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:1036: assert 401 == 200
+E   assert 401 == 200
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:1060: assert 401 == 200
+E   assert 401 == 200
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:1076: assert 401 == 200
+E   assert 401 == 200
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:1089: assert 401 == 200
+E   assert 401 == 200
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:1099: assert 401 == 200
+E   assert 401 == 200
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:1119: assert 401 == 200
+E   assert 401 == 404
+     +  where 401 = <Response [401 Unauthorized]>.status_code
+c:\dev\projects\werender\tests\test_coordinator.py:1127: assert 401 == 404
+E   AssertionError: assert 'worker-001' not in {'worker-001': WorkerInfo(worker_id='worker-001', worker_name='test-worker', cpu_cores=8, gpu_name='Test GPU', last_seen=1769015054.163024, current_task_id=None)}
+     +  where 'worker-001' = WorkerInfo(worker_id='worker-001', worker_name='test-worker', cpu_cores=8, gpu_name='Test GPU', last_seen=1769015054.163024, current_task_id=None).worker_id
+     +  and   {'worker-001': WorkerInfo(worker_id='worker-001', worker_name='test-worker', cpu_cores=8, gpu_name='Test GPU', last_seen=1769015054.163024, current_task_id=None)} = <werender.network.coordinator.CoordinatorServer object at 0x0000022F2A74BAD0>.workers
+c:\dev\projects\werender\tests\test_coordinator.py:1250: AssertionError: assert 'worker-001' not in {'worker-001': WorkerInfo(worker_id='worker-001', worker_name='test-worker', cpu_cores=8, gpu_name='Test GPU', last_seen=1769015054.163024, current_task_id=None)}
+E   AttributeError: '_asyncio.Task' object has no attribute 'status'
+c:\dev\projects\werender\tests\test_coordinator.py:1276: AttributeError: '_asyncio.Task' object has no attribute 'status'
+E   AssertionError: Expected 'mock' to have been called.
+
+During handling of the above exception, another exception occurred:
+E   AssertionError: Expected 'mock' to have been called.
+c:\dev\projects\werender\tests\test_coordinator.py:1320: AssertionError: Expected 'mock' to have been called.
+E   AssertionError: Expected 'start' to have been called once. Called 0 times.
+
+During handling of the above exception, another exception occurred:
+E   AssertionError: Expected 'start' to have been called once. Called 0 times.
+c:\dev\projects\werender\tests\test_coordinator.py:1336: AssertionError: Expected 'start' to have been called once. Called 0 times.
+E   AssertionError: Expected 'stop' to have been called once. Called 0 times.
+
+During handling of the above exception, another exception occurred:
+E   AssertionError: Expected 'stop' to have been called once. Called 0 times.
+c:\dev\projects\werender\tests\test_coordinator.py:1345: AssertionError: Expected 'stop' to have been called once. Called 0 times.
+=========================== short test summary info ===========================
+FAILED tests/test_coordinator.py::TestCoordinatorServerInitialization::test_init_handles_blender_version_failure
+FAILED tests/test_coordinator.py::TestApiRequestTask::test_request_task_with_no_jobs
+FAILED tests/test_coordinator.py::TestApiRequestTask::test_request_task_with_pending_job
+FAILED tests/test_coordinator.py::TestApiRequestTask::test_request_task_creates_worker
+FAILED tests/test_coordinator.py::TestApiRequestTask::test_request_task_updates_existing_worker
+FAILED tests/test_coordinator.py::TestApiRequestTask::test_request_task_assigns_task
+FAILED tests/test_coordinator.py::TestApiRequestTask::test_request_task_no_running_jobs
+FAILED tests/test_coordinator.py::TestApiCompleteTask::test_complete_task_success
+FAILED tests/test_coordinator.py::TestApiCompleteTask::test_complete_task_not_found
+FAILED tests/test_coordinator.py::TestApiCompleteTask::test_complete_task_frees_worker
+FAILED tests/test_coordinator.py::TestApiCompleteTask::test_complete_task_job_completion
+FAILED tests/test_coordinator.py::TestApiFailTask::test_fail_task_success - a...
+FAILED tests/test_coordinator.py::TestApiFailTask::test_fail_task_not_found
+FAILED tests/test_coordinator.py::TestApiFailTask::test_fail_task_frees_worker
+FAILED tests/test_coordinator.py::TestApiFailTask::test_fail_task_default_error
+FAILED tests/test_coordinator.py::TestApiCreateJob::test_create_job_success
+FAILED tests/test_coordinator.py::TestApiCreateJob::test_create_job_default_name
+FAILED tests/test_coordinator.py::TestApiListJobs::test_list_jobs_empty - ass...
+FAILED tests/test_coordinator.py::TestApiListJobs::test_list_jobs_with_jobs
+FAILED tests/test_coordinator.py::TestApiListJobs::test_list_jobs_multiple_jobs
+FAILED tests/test_coordinator.py::TestApiGetJob::test_get_job_success - asser...
+FAILED tests/test_coordinator.py::TestApiGetJob::test_get_job_not_found - ass...
+FAILED tests/test_coordinator.py::TestApiGetJob::test_get_job_includes_task_details
+FAILED tests/test_coordinator.py::TestApiStartJob::test_start_job_success - a...
+FAILED tests/test_coordinator.py::TestApiStartJob::test_start_job_not_found
+FAILED tests/test_coordinator.py::TestApiStartJob::test_start_job_already_running
+FAILED tests/test_coordinator.py::TestApiPauseJob::test_pause_job_success - a...
+FAILED tests/test_coordinator.py::TestApiPauseJob::test_pause_job_not_found
+FAILED tests/test_coordinator.py::TestApiResumeJob::test_resume_job_success
+FAILED tests/test_coordinator.py::TestApiResumeJob::test_resume_job_not_found
+FAILED tests/test_coordinator.py::TestApiCancelJob::test_cancel_job_success
+FAILED tests/test_coordinator.py::TestApiCancelJob::test_cancel_job_not_found
+FAILED tests/test_coordinator.py::TestApiCancelJob::test_cancel_job_resets_tasks
+FAILED tests/test_coordinator.py::TestApiUpdateJob::test_update_job_frame_range
+FAILED tests/test_coordinator.py::TestApiUpdateJob::test_update_job_not_found
+FAILED tests/test_coordinator.py::TestApiUpdateJob::test_update_job_running_job
+FAILED tests/test_coordinator.py::TestApiUpdateJob::test_update_job_invalid_frame_range
+FAILED tests/test_coordinator.py::TestApiUpdateJob::test_update_job_partial_update
+FAILED tests/test_coordinator.py::TestApiUpdateJob::test_update_job_completed_job
+FAILED tests/test_coordinator.py::TestApiGetBlendFile::test_get_blend_file_success
+FAILED tests/test_coordinator.py::TestApiGetBlendFile::test_get_blend_file_not_found
+FAILED tests/test_coordinator.py::TestApiGetBlendFile::test_get_blend_file_packed_file
+FAILED tests/test_coordinator.py::TestApiReloadBlend::test_reload_blend_success
+FAILED tests/test_coordinator.py::TestApiReloadBlend::test_reload_blend_not_found
+FAILED tests/test_coordinator.py::TestApiReloadBlend::test_reload_blend_invalid_extension
+FAILED tests/test_coordinator.py::TestApiReloadBlend::test_reload_blend_running_job
+FAILED tests/test_coordinator.py::TestApiListWorkers::test_list_workers_empty
+FAILED tests/test_coordinator.py::TestApiListWorkers::test_list_workers_with_workers
+FAILED tests/test_coordinator.py::TestApiListWorkers::test_list_workers_multiple_workers
+FAILED tests/test_coordinator.py::TestApiGetSyncManifest::test_get_sync_manifest
+FAILED tests/test_coordinator.py::TestApiGetSettings::test_get_settings - ass...
+FAILED tests/test_coordinator.py::TestApiListAddons::test_list_addons - asser...
+FAILED tests/test_coordinator.py::TestApiDownloadAddon::test_download_addon_success
+FAILED tests/test_coordinator.py::TestApiDownloadAddon::test_download_addon_not_found
+FAILED tests/test_coordinator.py::TestHealthCheckLoop::test_health_check_removes_stale_workers
+FAILED tests/test_coordinator.py::TestHealthCheckLoop::test_health_check_requeues_stale_tasks
+FAILED tests/test_coordinator.py::TestBroadcastUpdatesLoop::test_broadcast_updates_loop_broadcasts
+FAILED tests/test_coordinator.py::TestLifecycleMethods::test_on_startup - Ass...
+FAILED tests/test_coordinator.py::TestLifecycleMethods::test_on_shutdown - As...
+59 failed, 39 passed in 26.27s

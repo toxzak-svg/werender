@@ -1,0 +1,58 @@
+.........F...........F...........FF.........................F........... [ 73%]
+.......FF.FFF.............                                               [100%]
+================================== FAILURES ===================================
+E   AssertionError: assert '5.0.1' == ''
+      
+      + 5.0.1
+C:\dev\projects\werender\tests\test_coordinator.py:269: AssertionError: assert '5.0.1' == ''
+E   KeyError: 'get'
+
+During handling of the above exception, another exception occurred:
+E   AttributeError: 'State' object has no attribute 'get'
+---------------------------- Captured stdout call -----------------------------
+\U0001f4dd New worker registered: test-worker (ID: worker-001)
+C:\Users\Zwmar\AppData\Roaming\Python\Python314\site-packages\starlette\datastructures.py:688: AttributeError: 'State' object has no attribute 'get'
+E   assert 400 == 200
+     +  where 400 = <Response [400 Bad Request]>.status_code
+C:\dev\projects\werender\tests\test_coordinator.py:751: assert 400 == 200
+E   assert 400 == 200
+     +  where 400 = <Response [400 Bad Request]>.status_code
+C:\dev\projects\werender\tests\test_coordinator.py:767: assert 400 == 200
+E   assert 400 == 200
+     +  where 400 = <Response [400 Bad Request]>.status_code
+---------------------------- Captured stdout call -----------------------------
+[DEBUG] _api_reload_blend called with job_id=759e78b6, blend.filename=new.blend
+C:\dev\projects\werender\tests\test_coordinator.py:1044: assert 400 == 200
+E   AssertionError: assert 'worker-001' not in {'worker-001': WorkerInfo(worker_id='worker-001', worker_name='test-worker', cpu_cores=8, gpu_name='Test GPU', last_seen=1769015989.3910975, current_task_id=None)}
+     +  where 'worker-001' = WorkerInfo(worker_id='worker-001', worker_name='test-worker', cpu_cores=8, gpu_name='Test GPU', last_seen=1769015989.3910975, current_task_id=None).worker_id
+     +  and   {'worker-001': WorkerInfo(worker_id='worker-001', worker_name='test-worker', cpu_cores=8, gpu_name='Test GPU', last_seen=1769015989.3910975, current_task_id=None)} = <werender.network.coordinator.CoordinatorServer object at 0x000002AD917DAA90>.workers
+C:\dev\projects\werender\tests\test_coordinator.py:1310: AssertionError: assert 'worker-001' not in {'worker-001': WorkerInfo(worker_id='worker-001', worker_name='test-worker', cpu_cores=8, gpu_name='Test GPU', last_seen=1769015989.3910975, current_task_id=None)}
+E   AttributeError: '_asyncio.Task' object has no attribute 'status'
+C:\dev\projects\werender\tests\test_coordinator.py:1336: AttributeError: '_asyncio.Task' object has no attribute 'status'
+E   AssertionError: Expected 'mock' to have been called.
+
+During handling of the above exception, another exception occurred:
+E   AssertionError: Expected 'mock' to have been called.
+C:\dev\projects\werender\tests\test_coordinator.py:1380: AssertionError: Expected 'mock' to have been called.
+E   AssertionError: Expected 'start' to have been called once. Called 0 times.
+
+During handling of the above exception, another exception occurred:
+E   AssertionError: Expected 'start' to have been called once. Called 0 times.
+C:\dev\projects\werender\tests\test_coordinator.py:1396: AssertionError: Expected 'start' to have been called once. Called 0 times.
+E   AssertionError: Expected 'stop' to have been called once. Called 0 times.
+
+During handling of the above exception, another exception occurred:
+E   AssertionError: Expected 'stop' to have been called once. Called 0 times.
+C:\dev\projects\werender\tests\test_coordinator.py:1405: AssertionError: Expected 'stop' to have been called once. Called 0 times.
+=========================== short test summary info ===========================
+FAILED tests/test_coordinator.py::TestCoordinatorServerInitialization::test_init_handles_blender_version_failure
+FAILED tests/test_coordinator.py::TestApiRequestTask::test_request_task_creates_worker
+FAILED tests/test_coordinator.py::TestApiCreateJob::test_create_job_success
+FAILED tests/test_coordinator.py::TestApiCreateJob::test_create_job_default_name
+FAILED tests/test_coordinator.py::TestApiReloadBlend::test_reload_blend_success
+FAILED tests/test_coordinator.py::TestHealthCheckLoop::test_health_check_removes_stale_workers
+FAILED tests/test_coordinator.py::TestHealthCheckLoop::test_health_check_requeues_stale_tasks
+FAILED tests/test_coordinator.py::TestBroadcastUpdatesLoop::test_broadcast_updates_loop_broadcasts
+FAILED tests/test_coordinator.py::TestLifecycleMethods::test_on_startup - Ass...
+FAILED tests/test_coordinator.py::TestLifecycleMethods::test_on_shutdown - As...
+10 failed, 88 passed in 16.69s
