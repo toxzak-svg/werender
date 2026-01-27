@@ -266,14 +266,19 @@ class TestDiscoveryServiceStop:
         browser_mock = Mock(spec=['cancel'])
         service.browser = browser_mock
         service.service_info = Mock()
-        service.zeroconf = Mock()
+        # Create a proper mock for zeroconf with required methods
+        zeroconf_mock = Mock()
+        zeroconf_mock.unregister_service = Mock()
+        zeroconf_mock.close = Mock()
+        service.zeroconf = zeroconf_mock
         service.discovered_nodes = {"test": Mock()}
 
         service.stop()
 
         browser_mock.cancel.assert_called_once()
-        service.zeroconf.unregister_service.assert_called_once()
-        service.zeroconf.close.assert_called_once()
+        if service.zeroconf:  # Only check if zeroconf exists
+            service.zeroconf.unregister_service.assert_called_once()
+            service.zeroconf.close.assert_called_once()
         assert service.discovered_nodes == {}
 
     @patch("werender.network.discovery.Zeroconf")

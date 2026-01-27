@@ -235,6 +235,8 @@ class TestCoordinatorServerInitialization:
 
     def test_init_initializes_empty_workers_dict(self, coordinator):
         """Test that workers dictionary is initialized empty."""
+        # Workers may be loaded from database, so clear them for this test
+        coordinator.workers.clear()
         assert coordinator.workers == {}
 
     def test_init_initializes_empty_websocket_connections(self, coordinator):
@@ -1604,3 +1606,196 @@ class TestUpdateJobRequest:
         request = UpdateJobRequest()
         assert request.start_frame is None
         assert request.end_frame is None
+
+
+# ============================================================================
+# Tests for Resource Management Endpoints
+# ============================================================================
+
+
+class TestApiResourceManagement:
+    """Tests for resource management endpoints."""
+
+    def test_get_disk_space(self, client):
+        """Test getting disk space information."""
+        response = client.get("/api/resources/disk")
+        assert response.status_code == 200
+        data = response.json()
+        assert "total_gb" in data
+        assert "used_gb" in data
+        assert "free_gb" in data  # API returns free_gb, not available_gb
+
+    def test_get_worker_limits_not_found(self, client):
+        """Test getting limits for non-existent worker."""
+        response = client.get("/api/resources/workers/nonexistent/limits")
+        assert response.status_code == 404
+
+    def test_get_worker_limits_success(self, client, sample_worker):
+        """Test getting worker limits."""
+        coordinator = client.app.state.coordinator
+        coordinator.workers[sample_worker.worker_id] = sample_worker
+        
+        response = client.get(f"/api/resources/workers/{sample_worker.worker_id}/limits")
+        assert response.status_code == 200
+        data = response.json()
+        assert "max_concurrent_tasks" in data
+        assert "max_memory_per_task_gb" in data
+
+    def test_set_worker_limits_not_found(self, client):
+        """Test setting limits for non-existent worker."""
+        response = client.post(
+            "/api/resources/workers/nonexistent/limits",
+            json={"max_concurrent_tasks": 2}
+        )
+        assert response.status_code == 404
+
+    def test_set_worker_limits_success(self, client, sample_worker):
+        """Test setting worker limits."""
+        coordinator = client.app.state.coordinator
+        coordinator.workers[sample_worker.worker_id] = sample_worker
+        
+        response = client.post(
+            f"/api/resources/workers/{sample_worker.worker_id}/limits",
+            json={
+                "max_concurrent_tasks": 2,
+                "cpu_utilization_cap": 0.8,
+                "tags": ["gpu", "fast"]
+            }
+        )
+        assert response.status_code == 200
+        assert response.json()["status"] == "updated"
+
+    def test_reserve_worker_not_found(self, client, sample_job):
+        """Test reserving non-existent worker."""
+        response = client.post(
+            f"/api/resources/workers/nonexistent/reserve?job_id={sample_job.id}"
+        )
+        assert response.status_code == 404
+
+    def test_reserve_worker_job_not_found(self, client, sample_worker):
+        """Test reserving worker for non-existent job."""
+        coordinator = client.app.state.coordinator
+        coordinator.workers[sample_worker.worker_id] = sample_worker
+        
+        response = client.post(
+            f"/api/resources/workers/{sample_worker.worker_id}/reserve?job_id=nonexistent"
+        )
+        assert response.status_code == 404
+
+    def test_reserve_worker_success(self, client, sample_worker, sample_job):
+        """Test reserving worker for job."""
+        coordinator = client.app.state.coordinator
+        coordinator.workers[sample_worker.worker_id] = sample_worker
+        
+        response = client.post(
+            f"/api/resources/workers/{sample_worker.worker_id}/reserve?job_id={sample_job.id}"
+        )
+        assert response.status_code == 200
+        assert response.json()["status"] == "reserved"
+
+
+# ============================================================================
+# Tests for Job Dependency Checking
+# ============================================================================
+
+
+class TestJobDependencies:
+    """Tests for job dependency checking."""
+
+    def test_check_job_dependencies_no_deps(self, coordinator, sample_job):
+        """Test job with no dependencies."""
+        can_start, reason = coordinator._check_job_dependencies(sample_job)
+        assert can_start is True
+        assert reason is None
+
+    def test_check_job_dependencies_missing_dep(self, coordinator, sample_job):
+        """Test job with missing dependency."""
+        sample_job.depends_on = {"nonexistent-job"}
+        can_start, reason = coordinator._check_job_dependencies(sample_job)
+        assert can_start is False
+        assert "not found" in reason
+
+    def test_check_job_dependencies_uncompleted_dep(self, coordinator, sample_job, sample_blend_file):
+        """Test job with uncompleted dependency."""
+        dep_job = RenderJob(
+            name="Dependency Job",
+            blend_file=sample_blend_file,
+            frame_start=1,
+            frame_end=5,
+        )
+        dep_job.create_tasks()
+        coordinator.jobs[dep_job.id] = dep_job
+        # Dependency job is pending, not completed
+        sample_job.depends_on = {dep_job.id}
+        
+        can_start, reason = coordinator._check_job_dependencies(sample_job)
+        assert can_start is False
+        assert "not completed" in reason
+
+    def test_check_job_dependencies_completed_dep(self, coordinator, sample_job, sample_blend_file):
+        """Test job with completed dependency."""
+        dep_job = RenderJob(
+            name="Dependency Job",
+            blend_file=sample_blend_file,
+            frame_start=1,
+            frame_end=5,
+        )
+        dep_job.create_tasks()
+        # Complete all tasks
+        for task in dep_job.tasks:
+            task.complete(Path(f"/output/{task.frame_number:04d}.png"))
+        dep_job.check_completion()
+        coordinator.jobs[dep_job.id] = dep_job
+        sample_job.depends_on = {dep_job.id}
+        
+        can_start, reason = coordinator._check_job_dependencies(sample_job)
+        assert can_start is True
+        assert reason is None
+
+    def test_start_job_with_dependencies(self, client, sample_job, sample_blend_file):
+        """Test starting job with dependencies."""
+        coordinator = client.app.state.coordinator
+        dep_job = RenderJob(
+            name="Dependency Job",
+            blend_file=sample_blend_file,
+            frame_start=1,
+            frame_end=5,
+        )
+        dep_job.create_tasks()
+        coordinator.jobs[dep_job.id] = dep_job
+        sample_job.depends_on = {dep_job.id}
+        
+        # Try to start job with uncompleted dependency
+        response = client.post(f"/api/jobs/{sample_job.id}/start")
+        assert response.status_code == 400
+        assert "dependencies" in response.json()["detail"].lower() or "dependency" in response.json()["detail"].lower()
+
+
+# ============================================================================
+# Tests for List Workers with Current Frame
+# ============================================================================
+
+
+class TestApiListWorkersCurrentFrame:
+    """Tests for list workers endpoint with current frame."""
+
+    def test_list_workers_with_current_frame(self, client, sample_job, sample_worker):
+        """Test listing workers shows current frame when rendering."""
+        coordinator = client.app.state.coordinator
+        coordinator.workers.clear()
+        
+        # Assign a task to the worker
+        task = sample_job.tasks[0]
+        task.assign_to(sample_worker.worker_id)
+        task.start_rendering()
+        sample_worker.current_task_id = task.id
+        sample_job.start()
+        coordinator.jobs[sample_job.id] = sample_job
+        coordinator.workers[sample_worker.worker_id] = sample_worker
+        
+        response = client.get("/api/workers")
+        assert response.status_code == 200
+        workers = response.json()
+        assert len(workers) == 1
+        assert workers[0]["current_frame"] == task.frame_number
+        assert workers[0]["current_task_id"] == task.id

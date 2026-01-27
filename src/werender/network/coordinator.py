@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Optional
 
 import uvicorn
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect, Depends
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect, Depends, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -1197,7 +1197,7 @@ class CoordinatorServer:
         self.resource_manager.set_worker_limits(worker_id, limits)
         return {"status": "updated"}
 
-    async def _api_reserve_worker(self, worker_id: str, job_id: str) -> dict:
+    async def _api_reserve_worker(self, worker_id: str, job_id: str = Query(...)) -> dict:
         """API: Reserve a worker for a specific job."""
         if worker_id not in self.workers:
             raise HTTPException(status_code=404, detail="Worker not found")
