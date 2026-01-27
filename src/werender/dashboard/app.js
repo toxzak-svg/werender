@@ -78,7 +78,36 @@ function WorkerCard({ worker }) {
                         </div>
                     </div>
                 </div>
-                {worker.current_task_id && (
+                {/* CPU Usage and Temperature (optional - requires worker-side implementation) */}
+                {(worker.cpu_usage !== undefined || worker.temperature !== undefined) && (
+                    <div className="row g-2 mt-2">
+                        {worker.cpu_usage !== undefined && (
+                            <div className="col-6">
+                                <div className="d-flex align-items-center">
+                                    <i className="bi bi-speedometer2 me-2 text-warning"></i>
+                                    <small>CPU: {worker.cpu_usage}%</small>
+                                </div>
+                            </div>
+                        )}
+                        {worker.temperature !== undefined && (
+                            <div className="col-6">
+                                <div className="d-flex align-items-center">
+                                    <i className="bi bi-thermometer-half me-2 text-danger"></i>
+                                    <small>{worker.temperature}°C</small>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+                {worker.current_frame !== null && worker.current_frame !== undefined && (
+                    <div className="mt-2">
+                        <small className="text-info">
+                            <i className="bi bi-film me-1"></i>
+                            Frame: {worker.current_frame}
+                        </small>
+                    </div>
+                )}
+                {worker.current_task_id && !worker.current_frame && (
                     <div className="mt-2">
                         <small className="text-info">
                             <i className="bi bi-film me-1"></i>
@@ -812,6 +841,17 @@ function App() {
         }
     };
 
+    const handlePauseAll = async () => {
+        if (!confirm('Pause all running jobs?')) return;
+        try {
+            const result = await apiRequest('/jobs/pause_all', { method: 'POST' });
+            console.log(`Paused ${result.paused_count} job(s)`);
+        } catch (error) {
+            console.error('Failed to pause all jobs:', error);
+            alert('Failed to pause all jobs');
+        }
+    };
+
     const handleCreateJob = (result) => {
         console.log('Job created:', result);
         // Data will be updated via WebSocket
@@ -946,12 +986,23 @@ function App() {
                                         <h5 className="mb-0">
                                             <i className="bi bi-film me-2"></i>Render Jobs
                                         </h5>
-                                        <button
-                                            className="btn btn-primary btn-sm"
-                                            onClick={() => setShowCreateModal(true)}
-                                        >
-                                            <i className="bi bi-plus-circle me-1"></i>New Job
-                                        </button>
+                                        <div className="d-flex gap-2">
+                                            {runningJobs > 0 && (
+                                                <button
+                                                    className="btn btn-warning btn-sm"
+                                                    onClick={handlePauseAll}
+                                                    title="Pause all running jobs"
+                                                >
+                                                    <i className="bi bi-pause-fill me-1"></i>Pause All
+                                                </button>
+                                            )}
+                                            <button
+                                                className="btn btn-primary btn-sm"
+                                                onClick={() => setShowCreateModal(true)}
+                                            >
+                                                <i className="bi bi-plus-circle me-1"></i>New Job
+                                            </button>
+                                        </div>
                                     </div>
                                     <div className="card-body">
                                         {jobs.length === 0 ? (

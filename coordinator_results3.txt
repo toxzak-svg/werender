@@ -1,0 +1,17 @@
+...........F................................................F........... [ 73%]
+..........................                                               [100%]
+================================== FAILURES ===================================
+E   AssertionError: assert '19a241956b83...2f29bf3a5d4a0' == '4db1adaa961c...cbc5e46981ab5'
+      
+      - 4db1adaa961ce8bf4b6cbc5e46981ab5
+      + 19a241956b837591f1e2f29bf3a5d4a0
+C:\dev\projects\werender\tests\test_coordinator.py:301: AssertionError: assert '19a241956b83...2f29bf3a5d4a0' == '4db1adaa961c...cbc5e46981ab5'
+E   assert 500 == 200
+     +  where 500 = <Response [500 Internal Server Error]>.status_code
+---------------------------- Captured stdout call -----------------------------
+[DEBUG] _api_reload_blend called with job_id=b0953963, blend.filename=new.blend\n\U0001f4e6 Packing resources for job b0953963...\n\u26a0\ufe0f  Warning: Failed to pack resources: Failed to pack resources: 
+C:\dev\projects\werender\tests\test_coordinator.py:1041: assert 500 == 200
+=========================== short test summary info ===========================
+FAILED tests/test_coordinator.py::TestGetBlendFileHash::test_get_blend_file_hash_with_original_file
+FAILED tests/test_coordinator.py::TestApiReloadBlend::test_reload_blend_success
+2 failed, 96 passed in 31.50s

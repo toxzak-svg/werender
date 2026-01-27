@@ -1,0 +1,11 @@
+............................................................F........... [ 73%]
+..........................                                               [100%]
+================================== FAILURES ===================================
+E   assert 500 == 200
+     +  where 500 = <Response [500 Internal Server Error]>.status_code
+---------------------------- Captured stdout call -----------------------------
+[DEBUG] _api_reload_blend called with job_id=440e7a4a, blend.filename=new.blend\n\U0001f4e6 Packing resources for job 440e7a4a...\n\u26a0\ufe0f  Warning: Failed to pack resources: Failed to pack resources: \nDEBUG: Reload failed with 500: {"detail":"Failed to pack resources: Failed to pack resources: "}
+C:\dev\projects\werender\tests\test_coordinator.py:1049: assert 500 == 200
+=========================== short test summary info ===========================
+FAILED tests/test_coordinator.py::TestApiReloadBlend::test_reload_blend_success
+1 failed, 97 passed in 26.33s

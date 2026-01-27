@@ -3,7 +3,7 @@
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Set
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -160,6 +160,25 @@ class RenderJob(BaseModel):
 
     completed_at: Optional[datetime] = None
     """When the job finished."""
+
+    # Enhanced job management features
+    priority: int = Field(default=5, ge=1, le=10)
+    """Job priority (1-10, higher is more urgent)."""
+
+    requires_gpu: bool = False
+    """Whether this job requires GPU acceleration."""
+
+    min_memory_gb: Optional[float] = None
+    """Minimum memory requirement in GB."""
+
+    worker_tags: Set[str] = Field(default_factory=set)
+    """Required worker tags/groups."""
+
+    depends_on: Set[str] = Field(default_factory=set)
+    """Job IDs that must complete before this job starts."""
+
+    scheduled_time: Optional[datetime] = None
+    """When to start this job (for scheduled jobs)."""
 
     def create_tasks(self) -> None:
         """Create frame tasks for all frames in the range."""

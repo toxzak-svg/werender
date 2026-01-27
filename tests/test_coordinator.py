@@ -80,8 +80,9 @@ def coordinator(mock_system_specs, mock_blender_renderer, mock_discovery_service
     """Create a CoordinatorServer instance with mocked dependencies."""
     with patch("werender.utils.system.get_system_specs", return_value=mock_system_specs), \
          patch("werender.core.blender.BlenderRenderer", return_value=mock_blender_renderer), \
-         patch("werender.network.discovery.DiscoveryService", return_value=mock_discovery_service), \
-         patch("werender.network.sync.SyncManager", return_value=mock_sync_manager):
+         patch("werender.network.coordinator.BlenderRenderer", return_value=mock_blender_renderer), \
+         patch("werender.network.coordinator.DiscoveryService", return_value=mock_discovery_service), \
+         patch("werender.network.coordinator.SyncManager", return_value=mock_sync_manager):
         coord = CoordinatorServer(port=8420)
         # Use real temp directory for config
         coord.config_dir = Path(tempfile.mkdtemp())
@@ -210,8 +211,9 @@ class TestCoordinatorServerInitialization:
         """Test initialization with default port."""
         with patch("werender.utils.system.get_system_specs", return_value=mock_system_specs), \
              patch("werender.core.blender.BlenderRenderer", return_value=mock_blender_renderer), \
-             patch("werender.network.discovery.DiscoveryService"), \
-             patch("werender.network.sync.SyncManager"):
+             patch("werender.network.coordinator.BlenderRenderer", return_value=mock_blender_renderer), \
+             patch("werender.network.coordinator.DiscoveryService"), \
+             patch("werender.network.coordinator.SyncManager"):
             coordinator = CoordinatorServer()
             assert coordinator.port == 8420
             assert coordinator.node_id is not None
@@ -221,8 +223,9 @@ class TestCoordinatorServerInitialization:
         """Test initialization with custom port."""
         with patch("werender.utils.system.get_system_specs", return_value=mock_system_specs), \
              patch("werender.core.blender.BlenderRenderer", return_value=mock_blender_renderer), \
-             patch("werender.network.discovery.DiscoveryService"), \
-             patch("werender.network.sync.SyncManager"):
+             patch("werender.network.coordinator.BlenderRenderer", return_value=mock_blender_renderer), \
+             patch("werender.network.coordinator.DiscoveryService"), \
+             patch("werender.network.coordinator.SyncManager"):
             coordinator = CoordinatorServer(port=9000)
             assert coordinator.port == 9000
 
@@ -265,8 +268,9 @@ class TestCoordinatorServerInitialization:
         
         with patch("werender.utils.system.get_system_specs", return_value=mock_system_specs), \
              patch("werender.core.blender.BlenderRenderer", return_value=mock_failing_renderer), \
-             patch("werender.network.discovery.DiscoveryService"), \
-             patch("werender.network.sync.SyncManager"):
+             patch("werender.network.coordinator.BlenderRenderer", return_value=mock_failing_renderer), \
+             patch("werender.network.coordinator.DiscoveryService"), \
+             patch("werender.network.coordinator.SyncManager"):
             coordinator = CoordinatorServer()
             # When BlenderRenderer fails, version should be empty string
             assert coordinator.blender_version == ""
@@ -295,7 +299,9 @@ class TestGetBlendFileHash:
 
     def test_get_blend_file_hash_with_original_file(self, coordinator, sample_job):
         """Test hash calculation with original blend file."""
-        expected_hash = hashlib.md5(b"fake blend file content").hexdigest()
+        # Valid header content used in sample_blend_file fixture
+        valid_header = b'BLENDER_v401' + b'\x00' * 100
+        expected_hash = hashlib.md5(valid_header).hexdigest()
         result = coordinator._get_blend_file_hash(sample_job)
 
         assert result == expected_hash
@@ -902,6 +908,42 @@ class TestApiResumeJob:
         assert response.status_code == 404
 
 
+class TestApiPauseAllJobs:
+    """Tests for _api_pause_all_jobs endpoint."""
+
+    def test_pause_all_jobs_success(self, client, sample_job):
+        """Test pausing all running jobs."""
+        sample_job.start()
+        # Create another running job
+        coordinator = client.app.state.coordinator
+        job2 = RenderJob(
+            name="Job 2",
+            blend_file=sample_job.blend_file,
+            frame_start=1,
+            frame_end=5,
+        )
+        job2.create_tasks()
+        job2.start()
+        coordinator.jobs[job2.id] = job2
+
+        response = client.post("/api/jobs/pause_all")
+        assert response.status_code == 200
+        result = response.json()
+        assert result["status"] == "success"
+        assert result["paused_count"] == 2
+        assert sample_job.status == "paused"
+        assert job2.status == "paused"
+
+    def test_pause_all_jobs_no_running(self, client, sample_job):
+        """Test pausing all when no jobs are running."""
+        # Job is pending, not running
+        response = client.post("/api/jobs/pause_all")
+        assert response.status_code == 200
+        result = response.json()
+        assert result["status"] == "success"
+        assert result["paused_count"] == 0
+
+
 class TestApiCancelJob:
     """Tests for _api_cancel_job endpoint."""
 
@@ -1031,16 +1073,34 @@ class TestApiGetBlendFile:
 class TestApiReloadBlend:
     """Tests for _api_reload_blend endpoint."""
 
-    def test_reload_blend_success(self, client, sample_job, sample_blend_file):
+    def test_reload_blend_success(self, client, sample_job, mock_blender_renderer):
         """Test reloading blend file."""
-        with open(sample_blend_file, "rb") as f:
-            response = client.post(
-                f"/api/jobs/{sample_job.id}/reload_blend",
-                files={"blend": ("new.blend", f, "application/octet-stream")},
-            )
-        assert response.status_code == 200
-        assert response.json()["status"] == "success"
-        assert sample_job.status == "pending"
+        # Use explicit content to ensure validity
+        valid_content = b'BLENDER_v401' + b'\x00' * 100
+        # Create a temporary file for upload
+        import tempfile
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.blend')
+        temp_file.write(valid_content)
+        temp_file.close()
+        
+        try:
+            with open(temp_file.name, "rb") as f:
+                # Patch BlenderRenderer at the call site
+                with patch("werender.network.coordinator.BlenderRenderer", return_value=mock_blender_renderer):
+                    response = client.post(
+                        f"/api/jobs/{sample_job.id}/reload_blend",
+                        files={"blend": ("new.blend", f, "application/octet-stream")},
+                    )
+            
+            if response.status_code != 200:
+                print(f"DEBUG: Reload failed with {response.status_code}: {response.text}")
+                
+            assert response.status_code == 200
+            assert response.json()["status"] == "success"
+            assert sample_job.status == "pending"
+        finally:
+            import os
+            os.unlink(temp_file.name)
 
     def test_reload_blend_not_found(self, client, sample_blend_file):
         """Test reloading blend file for non-existent job."""
@@ -1080,9 +1140,14 @@ class TestApiListWorkers:
 
     def test_list_workers_empty(self, client):
         """Test listing workers when none exist."""
+        coordinator = client.app.state.coordinator
+        # Clear any workers that might have been loaded from database
+        coordinator.workers.clear()
         response = client.get("/api/workers")
         assert response.status_code == 200
-        assert response.json() == []
+        workers = response.json()
+        assert isinstance(workers, list)
+        assert len(workers) == 0
 
     def test_list_workers_with_workers(self, client, sample_worker):
         """Test listing workers when workers exist."""
@@ -1102,6 +1167,8 @@ class TestApiListWorkers:
     def test_list_workers_multiple_workers(self, client):
         """Test listing multiple workers."""
         coordinator = client.app.state.coordinator
+        # Clear any existing workers
+        coordinator.workers.clear()
 
         for i in range(3):
             worker = WorkerInfo(
@@ -1117,6 +1184,10 @@ class TestApiListWorkers:
         assert response.status_code == 200
         workers = response.json()
         assert len(workers) == 3
+        # Check that all workers have required fields including current_frame
+        for worker_data in workers:
+            assert "worker_id" in worker_data
+            assert "current_frame" in worker_data  # New field
 
 
 # ============================================================================

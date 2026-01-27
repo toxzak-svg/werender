@@ -14,6 +14,14 @@ from websockets import connect as websocket_connect
 from werender.core.blender import BlenderRenderer, RenderResult
 from werender.network.discovery import DiscoveryService, NodeInfo
 from werender.network.auth import get_worker_api_key
+from werender.network.transfer import (
+    TransferOptimizer,
+    BandwidthManager,
+    NetworkQualityDetector,
+    TransferPriority,
+    CompressionLevel,
+)
+from werender.network.chunked_transfer import ChunkedTransfer
 
 
 class WorkerNode:
@@ -87,6 +95,14 @@ class WorkerNode:
 
         # API key for authentication
         self.api_key = None
+
+        # Transfer optimization
+        self.bandwidth_manager = BandwidthManager(throttle_during_render=True)
+        self.quality_detector = NetworkQualityDetector()
+        self.transfer_optimizer = TransferOptimizer(
+            bandwidth_manager=self.bandwidth_manager,
+            quality_detector=self.quality_detector,
+        )
 
     def start(self) -> None:
         """Start the worker node."""
@@ -218,15 +234,21 @@ class WorkerNode:
                 await self._report_task_failure(task_data, "Failed to download blend file")
                 return
 
-            # Render the frame
-            output_dir = self.temp_dir / task_data["job_id"]
-            output_dir.mkdir(exist_ok=True)
+            # Set rendering state for bandwidth management
+            self.bandwidth_manager.set_rendering_state(True)
 
-            result = self.blender.render_frame(
-                blend_path,
-                task_data["frame_number"],
-                output_dir,
-            )
+            try:
+                # Render the frame
+                output_dir = self.temp_dir / task_data["job_id"]
+                output_dir.mkdir(exist_ok=True)
+
+                result = self.blender.render_frame(
+                    blend_path,
+                    task_data["frame_number"],
+                    output_dir,
+                )
+            finally:
+                self.bandwidth_manager.set_rendering_state(False)
 
             if result.success:
                 print(f"✅ Rendered frame {result.frame} in {result.render_time:.1f}s")
@@ -255,7 +277,7 @@ class WorkerNode:
         file_hash: str,
     ) -> Optional[Path]:
         """
-        Download blend file from coordinator.
+        Download blend file from coordinator with optimization.
 
         Args:
             base_url: Coordinator base URL
@@ -273,25 +295,67 @@ class WorkerNode:
         if local_path.exists():
             return local_path
 
-        # Download file with API key
+        # Download file with API key and optimization
         try:
             headers = {"X-API-Key": self.api_key}
-            async with self.http_client.stream(
-                "GET",
-                f"{base_url}/api/jobs/{job_id}/blend",
-                headers=headers,
-            ) as response:
-                if response.status_code != 200:
-                    print(f"❌ Failed to download blend file: {response.status_code}")
+            url = f"{base_url}/api/jobs/{job_id}/blend"
+
+            # Check file size first to decide on transfer method
+            try:
+                head_response = await self.http_client.head(url, headers=headers)
+                file_size = 0
+                if "Content-Length" in head_response.headers:
+                    file_size = int(head_response.headers["Content-Length"])
+            except Exception:
+                file_size = 0
+
+            # Use chunked transfer for large files (>50MB)
+            if file_size > 50 * 1024 * 1024:
+                print(f"📦 Using chunked transfer for large file ({file_size / (1024*1024):.1f} MB)")
+                chunked = ChunkedTransfer(
+                    url=url,
+                    output_path=local_path,
+                    chunk_size=10 * 1024 * 1024,  # 10 MB chunks
+                    max_parallel_chunks=4,
+                )
+
+                def progress_callback(progress):
+                    if progress.total_bytes > 0:
+                        percent = (progress.downloaded_bytes / progress.total_bytes) * 100
+                        print(f"📥 Download progress: {percent:.1f}% ({progress.chunks_completed}/{progress.chunks_total} chunks)")
+
+                success = await chunked.download(
+                    self.http_client,
+                    headers=headers,
+                    progress_callback=progress_callback,
+                )
+
+                if success:
+                    print(f"📥 Downloaded blend file: {file_hash}")
+                    return local_path
+                else:
+                    print(f"❌ Chunked download failed")
+                    if local_path.exists():
+                        local_path.unlink()
                     return None
+            else:
+                # Use optimized transfer for smaller files
+                stats = await self.transfer_optimizer.download_file(
+                    self.http_client,
+                    url,
+                    local_path,
+                    priority=TransferPriority.HIGH,
+                    compression=None,  # Let it auto-detect
+                    headers=headers,
+                )
 
-                # Stream download to avoid memory issues
-                with open(local_path, "wb") as f:
-                    async for chunk in response.aiter_bytes(8192):
-                        f.write(chunk)
-
-            print(f"📥 Downloaded blend file: {file_hash}")
-            return local_path
+                if stats.bytes_transferred > 0:
+                    print(f"📥 Downloaded blend file: {file_hash} ({stats.bytes_transferred / (1024*1024):.1f} MB in {stats.elapsed_time:.1f}s)")
+                    if stats.compression_ratio:
+                        print(f"   Compression ratio: {stats.compression_ratio:.2%}")
+                    return local_path
+                else:
+                    return None
 
         except Exception as e:
             print(f"❌ Error downloading blend file: {e}")
